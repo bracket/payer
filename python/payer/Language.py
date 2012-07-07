@@ -1,11 +1,18 @@
-from ADT import Type, Matcher, var, _;
-from Memo import Memo, SharedMemo;
-from TerminalSet import TerminalSet;
+# # from ADT import Type, ADT.Matcher, var, _;
+# # from TerminalSet import TerminalSet;
+# # from TriBool import *;
+
+import ADT, TerminalSet, TriBool, Memo;
+from ADT import var, _;
+from TriBool import True_, False_, Maybe_, and_, or_;
 from itertools import product;
 
-memo = SharedMemo();
+namespace = { };
+nullspace = { };
 
-class Action(Type): pass;
+memo = Memo.SharedMemo();
+
+class Action(ADT.Type): pass;
 
 @memo
 @Action
@@ -15,7 +22,7 @@ def ActionGenerator(): return (None,); # function type
 @Action
 def ActionList(): return ([None],); # function type
 
-@Matcher
+@ADT.Matcher
 def delay_action(add):
 	@add(ActionGenerator(var('g')))
 	def f(g): return ActionList((g(),));
@@ -23,7 +30,7 @@ def delay_action(add):
 	@add(var('x'))
 	def f(x): return x;
 
-@Matcher
+@ADT.Matcher
 def dispatch_action(add):
 	@add(ActionGenerator(var('g')))
 	def f(g): g()();
@@ -32,7 +39,7 @@ def dispatch_action(add):
 	def f(t): 
 		for g in t: g();
 
-@Matcher
+@ADT.Matcher
 def combine_delay(add):
 	@add(ActionList(var('x')), ActionGenerator(var('g')))
 	def f(x, g): return ActionList(x + (g(),));
@@ -46,9 +53,9 @@ def combine_delay(add):
 	@add(ActionGenerator(var('g')), ActionGenerator(var('h')))
 	def f(g, h): return ActionList((g(), h()));
 
-memo = SharedMemo();
+memo = Memo.SharedMemo();
 
-class Language(Type): pass;
+class Language(ADT.Type): pass;
 
 @memo
 @Language
@@ -82,19 +89,27 @@ def Repeat(): return (Language,);
 @Language
 def SemanticAction(): return (Action, Language);
 
+@memo
+@Language
+def Ref(): return (str,);
+
+@memo
+@Language
+def Derivative(): return (str, Language);
+
 def null(): return Null();
 
 def epsilon(): return Epsilon();
 
 def div(): return Div();
 
-@Memo
+@Memo.Memo
 def literal(x):
 	if x: return Literal(x);
 	else: return Epsilon();
 
-@Memo
-@Matcher
+@Memo.Memo
+@ADT.Matcher
 def union(add):
 	@add(Null(), var('x'))
 	def f(x): return x;
@@ -105,8 +120,8 @@ def union(add):
 	@add(var('x'), var('y'))
 	def f(x, y): return Union(x, y);
 
-@Memo
-@Matcher
+@Memo.Memo
+@ADT.Matcher
 def concat(add):
 	@add(Null(), var('x'))
 	def f(): return null();
@@ -134,8 +149,8 @@ def concat(add):
 
 def repeat(L): return Repeat(L);
 
-@Memo
-@Matcher
+@Memo.Memo
+@ADT.Matcher
 def semantic_action(add):
 	@add(_, Null())
 	def f(): return null();
@@ -143,8 +158,8 @@ def semantic_action(add):
 	@add(var('g'), var('L'))
 	def f(g, L): return SemanticAction(g, L);
 
-@Memo
-@Matcher
+@Memo.Memo
+@ADT.Matcher
 def nullable(add):
 	@add(Null())
 	def f(): return False;
@@ -164,14 +179,63 @@ def nullable(add):
 	@add(Concat(var('x'), var('y')))
 	def f(x, y): return nullable(x) and nullable(y);
 
-	@add(Repeat(var('x')))
+	@add(Repeat(_))
 	def f(x): return True;
 
 	@add(SemanticAction(_, var('L')))
 	def f(L): return nullable(L);
 
-@Memo
-@Matcher
+def ref(name): return Ref(name);
+
+@Memo.Memo
+@ADT.Matcher
+def nullable_(add):
+	@add(Null())
+	def f(): return False_();
+
+	@add(Epsilon())
+	def f(): return True_();
+
+	@add(Div())
+	def f(): return True_();
+
+	@add(Literal(_))
+	def f(): return False_();
+
+	@add(Union(var('x'), var('y')))
+	def f(x, y): return or_(nullable_(x), nullable_(y));
+
+	@add(Concat(var('x'), var('y')))
+	def f(x, y): return and_(nullable_(x), nullable_(y));
+
+	@add(Repeat(_))
+	def f(x): return True_();
+
+	@add(SemanticAction(_, var('L')))
+	def f(L): return nullable_(L);
+
+	@add(Ref(var('name')))
+	def f(name):
+		l = Ref(name);
+		r = nullspace.get(l, None)
+		if r is not None: return r;
+
+		nullspace[l] = Maybe_();
+		r = nullspace[l] = nullable_(namespace[l]);
+		return r;
+	
+	@add(Derivative(var('s'), var('L')))
+	def f(s, L):
+		l = Derivative(s, L);
+		r = nullspace.get(l, None);
+		if r is not None: return r;
+
+		nullspace[l] = Maybe_();
+		r = nullspace[l] = nullable_(namespace[l]);
+		return r;
+
+@Memo.Memo
+@ADT.Matcher
 def derivative(add):
 	@add(_, Null())
 	def f(): return null();
@@ -199,8 +263,31 @@ def derivative(add):
 	@add(var('c'), SemanticAction(var('x'), var('L')))
 	def f(c, x, L): dispatch_action(x); return derivative(c, L);
 
-@Memo
-@Matcher
+	@add(var('c'), Ref(var('name')))
+	def f(c, name):
+		l = Ref(name);
+		d = Derivative(c, Ref(name));
+		r = namespace.get(d, None);
+		if r is not None: return r;
+
+		namespace[d] = d;
+		r = namespace[d] = derivative(c, namespace[l]);
+		return r;
+
+	@add(var('c'), Derivative(var('s'), var('L')))
+	def f(c, s, L):
+		l = Derivative(s, L);
+		d = Derivative(s + c, L);
+		r = namespace.get(d, None);
+		if r is not None: return r;
+
+		namespace[d] = d;
+		r = namespace[d] = derivative(c, namespace[l]);
+
+		return r;
+
+@Memo.Memo
+@ADT.Matcher
 def delayed_derivative(add):
 	@add(var('c'), SemanticAction(var('x'), SemanticAction(var('y'), var('L'))))
 	def f(c, x, y, L): return delayed_derivative(c, SemanticAction(combine_delay(x, y), L));
@@ -222,7 +309,7 @@ def delayed_derivative(add):
 	@add(var('c'), var('L'))
 	def f(c, L): return derivative(c, L);
 
-@Matcher
+@ADT.Matcher
 def dispatch_outer(add):
 	@add(SemanticAction(ActionList(var('t')), var('L')))
 	def f(t, L):
@@ -232,7 +319,7 @@ def dispatch_outer(add):
 	@add(var('L'))
 	def f(L): return L;
 
-@Matcher
+@ADT.Matcher
 def dispatch_to_div(add):
 	@add(SemanticAction(var('g'), Concat(Div(), var('L'))))
 	def f(g, L): dispatch_action(g); return L;
@@ -240,8 +327,8 @@ def dispatch_to_div(add):
 	@add(var('L'))
 	def f(L): return L;
 
-@Memo
-@Matcher
+@Memo.Memo
+@ADT.Matcher
 def derivative_set(add):
 	@add(var('s'), Null())
 	def f(s): return [(s, null())]
