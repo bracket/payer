@@ -2,56 +2,11 @@
 # # from TerminalSet import TerminalSet;
 # # from TriBool import *;
 
-import ADT, TerminalSet, TriBool, Memo;
+import ADT, TerminalSet, Action, TriBool, Memo;
 from ADT import var, _;
-from TriBool import True_, False_, Maybe_, and_, or_;
+from TriBool import and_, or_, True_, False_, Maybe_;
 from itertools import product;
-
-namespace = { };
-nullspace = { };
-
-memo = Memo.SharedMemo();
-
-class Action(ADT.Type): pass;
-
-@memo
-@Action
-def ActionGenerator(): return (None,); # function type
-
-@memo
-@Action
-def ActionList(): return ([None],); # function type
-
-@ADT.Matcher
-def delay_action(add):
-	@add(ActionGenerator(var('g')))
-	def f(g): return ActionList((g(),));
-
-	@add(var('x'))
-	def f(x): return x;
-
-@ADT.Matcher
-def dispatch_action(add):
-	@add(ActionGenerator(var('g')))
-	def f(g): g()();
-
-	@add(ActionList(var('t')))
-	def f(t): 
-		for g in t: g();
-
-@ADT.Matcher
-def combine_delay(add):
-	@add(ActionList(var('x')), ActionGenerator(var('g')))
-	def f(x, g): return ActionList(x + (g(),));
-
-	@add(ActionList(var('x')), ActionList(var('y')))
-	def f(x, y): return ActionList(x + y);
-
-	@add(ActionGenerator(var('g')), ActionList(var('x')))
-	def f(g, x): return ActionList((g(),) + x);
-
-	@add(ActionGenerator(var('g')), ActionGenerator(var('h')))
-	def f(g, h): return ActionList((g(), h()));
+from Action import ActionGenerator, ActionList;
 
 memo = Memo.SharedMemo();
 
@@ -103,12 +58,10 @@ def epsilon(): return Epsilon();
 
 def div(): return Div();
 
-@Memo.Memo
 def literal(x):
 	if x: return Literal(x);
 	else: return Epsilon();
 
-@Memo.Memo
 @ADT.Matcher
 def union(add):
 	@add(Null(), var('x'))
@@ -120,7 +73,6 @@ def union(add):
 	@add(var('x'), var('y'))
 	def f(x, y): return Union(x, y);
 
-@Memo.Memo
 @ADT.Matcher
 def concat(add):
 	@add(Null(), var('x'))
@@ -149,7 +101,6 @@ def concat(add):
 
 def repeat(L): return Repeat(L);
 
-@Memo.Memo
 @ADT.Matcher
 def semantic_action(add):
 	@add(_, Null())
@@ -158,156 +109,143 @@ def semantic_action(add):
 	@add(var('g'), var('L'))
 	def f(g, L): return SemanticAction(g, L);
 
-@Memo.Memo
-@ADT.Matcher
-def nullable(add):
-	@add(Null())
-	def f(): return False;
-
-	@add(Epsilon())
-	def f(): return True;
-
-	@add(Div())
-	def f(): return True;
-
-	@add(Literal(_))
-	def f(): return False;
-
-	@add(Union(var('x'), var('y')))
-	def f(x, y): return nullable(x) or nullable(y);
-
-	@add(Concat(var('x'), var('y')))
-	def f(x, y): return nullable(x) and nullable(y);
-
-	@add(Repeat(_))
-	def f(x): return True;
-
-	@add(SemanticAction(_, var('L')))
-	def f(L): return nullable(L);
-
 def ref(name): return Ref(name);
 
-@Memo.Memo
-@ADT.Matcher
-def nullable_(add):
-	@add(Null())
-	def f(): return False_();
+class LanguageSpace(object):
+	def __init__(self, namespace = None, nullspace = None):
+		if namespace: self.namespace = namespace;
+		else: self.namespace = { };
 
-	@add(Epsilon())
-	def f(): return True_();
+		if nullspace: self.nullspace = nullspace;
+		else: self.nullspace = { };
 
-	@add(Div())
-	def f(): return True_();
-
-	@add(Literal(_))
-	def f(): return False_();
-
-	@add(Union(var('x'), var('y')))
-	def f(x, y): return or_(nullable_(x), nullable_(y));
-
-	@add(Concat(var('x'), var('y')))
-	def f(x, y): return and_(nullable_(x), nullable_(y));
-
-	@add(Repeat(_))
-	def f(x): return True_();
-
-	@add(SemanticAction(_, var('L')))
-	def f(L): return nullable_(L);
-
-	@add(Ref(var('name')))
-	def f(name):
-		l = Ref(name);
-		r = nullspace.get(l, None)
-		if r is not None: return r;
-
-		nullspace[l] = Maybe_();
-		r = nullspace[l] = nullable_(namespace[l]);
-		return r;
+	def nullable(self, L):
+		return TriBool.to_bool(self.nullable_(L));
 	
-	@add(Derivative(var('s'), var('L')))
-	def f(s, L):
-		l = Derivative(s, L);
-		r = nullspace.get(l, None);
-		if r is not None: return r;
-
-		nullspace[l] = Maybe_();
-		r = nullspace[l] = nullable_(namespace[l]);
-		return r;
-
-@Memo.Memo
-@ADT.Matcher
-def derivative(add):
-	@add(_, Null())
-	def f(): return null();
-
-	@add(_, Epsilon())
-	def f(): return null();
-
-	@add(_, Div())
-	def f(): return null();
-
-	@add(var('c'), Literal(var('x')))
-	def f(c, x): return literal(x[1:]) if c == x[0] else null();
-
-	@add(var('c'), Union(var('x'), var('y')))
-	def f(c, x, y): return union(delayed_derivative(c, x), delayed_derivative(c, y));
-
-	@add(var('c'), Concat(var('x'), var('y')))
-	def f(c, x, y):
-		if nullable(x): return union(concat(derivative(c, x), y), derivative(c, y));
-		else: return concat(derivative(c, x), y);
+	def __getitem__(self, key):
+		return self.namespace[key];
 	
-	@add(var('c'), Repeat(var('x')))
-	def f(c, x): return concat(derivative(c, x), repeat(x));
+	def __setitem__(self, key, value):
+		self.namespace[key] = value;
 
-	@add(var('c'), SemanticAction(var('x'), var('L')))
-	def f(c, x, L): dispatch_action(x); return derivative(c, L);
+	@ADT.Matcher
+	def nullable_(add):
+		@add(_, Null())
+		def f(): return False_();
 
-	@add(var('c'), Ref(var('name')))
-	def f(c, name):
-		l = Ref(name);
-		d = Derivative(c, Ref(name));
-		r = namespace.get(d, None);
-		if r is not None: return r;
+		@add(_, Epsilon())
+		def f(): return True_();
 
-		namespace[d] = d;
-		r = namespace[d] = derivative(c, namespace[l]);
-		return r;
+		@add(_, Div())
+		def f(): return True_();
 
-	@add(var('c'), Derivative(var('s'), var('L')))
-	def f(c, s, L):
-		l = Derivative(s, L);
-		d = Derivative(s + c, L);
-		r = namespace.get(d, None);
-		if r is not None: return r;
+		@add(_, Literal(_))
+		def f(): return False_();
 
-		namespace[d] = d;
-		r = namespace[d] = derivative(c, namespace[l]);
+		@add(var('self'), Union(var('x'), var('y')))
+		def f(self, x, y): return or_(self.nullable_(x), self.nullable_(y));
 
-		return r;
+		@add(var('self'), Concat(var('x'), var('y')))
+		def f(self, x, y): return and_(self.nullable_(x), self.nullable_(y));
 
-@Memo.Memo
-@ADT.Matcher
-def delayed_derivative(add):
-	@add(var('c'), SemanticAction(var('x'), SemanticAction(var('y'), var('L'))))
-	def f(c, x, y, L): return delayed_derivative(c, SemanticAction(combine_delay(x, y), L));
+		@add(_, Repeat(_))
+		def f(): return True_();
 
-	@add(var('c'), SemanticAction(var('x'), var('L')))
-	def f(c, x, L): return semantic_action(delay_action(x), delayed_derivative(c, L));
+		@add(var('self'), SemanticAction(_, var('L')))
+		def f(self, L): return self.nullable_(L);
 
-	@add(var('c'), Union(var('x'), var('y')))
-	def f(c, x, y): return union(delayed_derivative(c, x), delayed_derivative(c, y));
+		@add(var('self'), Ref(var('name')))
+		def f(self, name):
+			l = Ref(name);
+			r = self.nullspace.get(l, None)
+			if r is not None: return r;
 
-	@add(var('c'), Concat(var('x'), var('y')))
-	def f(c, x, y):
-		if nullable(x): return union(concat(delayed_derivative(c, x), y), delayed_derivative(c, y));
-		else: return concat(delayed_derivative(c, x), y);
-	
-	@add(var('c'), Repeat(var('x')))
-	def f(c, x): return concat(delayed_derivative(c, x), repeat(x));
+			self.nullspace[l] = Maybe_();
+			r = self.nullspace[l] = self.nullable_(self.namespace[l]);
+			return r;
+		
+		@add(var('self'), Derivative(var('s'), var('L')))
+		def f(self, s, L):
+			l = Derivative(s, L);
+			r = self.nullspace.get(l, None);
+			if r is not None: return r;
 
-	@add(var('c'), var('L'))
-	def f(c, L): return derivative(c, L);
+			self.nullspace[l] = Maybe_();
+			r = self.nullspace[l] = self.nullable_(self.namespace[l]);
+			return r;
+
+	@ADT.Matcher
+	def derivative(add):
+		@add(_, _, Null())
+		def f(): return null();
+
+		@add(_, _, Epsilon())
+		def f(): return null();
+
+		@add(_, _, Div())
+		def f(): return null();
+
+		@add(_, var('c'), Literal(var('x')))
+		def f(c, x): return literal(x[1:]) if c == x[0] else null();
+
+		@add(var('self'), var('c'), Union(var('x'), var('y')))
+		def f(self, c, x, y): return union(self.delayed_derivative(c, x), self.delayed_derivative(c, y));
+
+		@add(var('self'), var('c'), Concat(var('x'), var('y')))
+		def f(self, c, x, y):
+			if self.nullable(x): return union(concat(self.derivative(c, x), y), self.derivative(c, y));
+			else: return concat(self.derivative(c, x), y);
+		
+		@add(var('self'), var('c'), Repeat(var('x')))
+		def f(self, c, x): return concat(self.derivative(c, x), repeat(x));
+
+		@add(var('self'), var('c'), SemanticAction(var('x'), var('L')))
+		def f(self, c, x, L): dispatch_action(x); return self.derivative(c, L);
+
+		@add(var('self'), var('c'), Ref(var('name')))
+		def f(self, c, name):
+			l = Ref(name);
+			d = Derivative(c, Ref(name));
+			r = self.namespace.get(d, None);
+			if r is not None: return r;
+
+			self.namespace[d] = d;
+			r = self.namespace[d] = self.derivative(c, self.namespace[l]);
+			return r;
+
+		@add(var('c'), Derivative(var('s'), var('L')))
+		def f(c, s, L):
+			l = Derivative(s, L);
+			d = Derivative(s + c, L);
+			r = self.namespace.get(d, None);
+			if r is not None: return r;
+
+			self.namespace[d] = d;
+			r = self.namespace[d] = self.derivative(c, self.namespace[l]);
+
+			return r;
+
+	@ADT.Matcher
+	def delayed_derivative(add):
+		@add(var('self'), var('c'), SemanticAction(var('x'), SemanticAction(var('y'), var('L'))))
+		def f(self, c, x, y, L): return self.delayed_derivative(c, SemanticAction(Action.combine_delay(x, y), L));
+
+		@add(var('self'), var('c'), SemanticAction(var('x'), var('L')))
+		def f(self, c, x, L): return semantic_action(Action.delay_action(x), self.delayed_derivative(c, L));
+
+		@add(var('self'), var('c'), Union(var('x'), var('y')))
+		def f(self, c, x, y): return union(self.delayed_derivative(c, x), self.delayed_derivative(c, y));
+
+		@add(var('self'), var('c'), Concat(var('x'), var('y')))
+		def f(self, c, x, y):
+			if self.nullable(x): return union(concat(self.delayed_derivative(c, x), y), self.delayed_derivative(c, y));
+			else: return concat(self.delayed_derivative(c, x), y);
+		
+		@add(var('self'), var('c'), Repeat(var('x')))
+		def f(self, c, x): return concat(self.delayed_derivative(c, x), repeat(x));
+
+		@add(var('self'), var('c'), var('L'))
+		def f(self, c, L): return self.derivative(c, L);
 
 @ADT.Matcher
 def dispatch_outer(add):
@@ -327,7 +265,6 @@ def dispatch_to_div(add):
 	@add(var('L'))
 	def f(L): return L;
 
-@Memo.Memo
 @ADT.Matcher
 def derivative_set(add):
 	@add(var('s'), Null())

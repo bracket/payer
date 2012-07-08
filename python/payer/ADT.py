@@ -67,3 +67,7 @@ class Matcher(object):
 		for pattern, binding, f in self.patterns:
 			if match(pattern, args):
 				return f(*map(Placeholder.get, binding));
+	
+	def __get__(self, other, other_type):
+		def f(*args): return self.__call__(other, *args);
+		return f;
