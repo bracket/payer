@@ -40,11 +40,30 @@ def _quote(s):
 
 class TerminalSet(object):
 	def __init__(self, *args, **kwargs):
-		if kwargs.get('skip_clean', False): args = tuple(_meld_list(sorted(args, key=_front)));
+		if not kwargs.get('skip_clean', False): args = tuple(_meld_list(sorted(args, key=_front)));
 		self.values = args;
 	
 	def __str__(self):
 		return 'TerminalSet(%s)' % ', '.join(map(_quote, self.values));
+	
+	def __contains__(self, x):
+		low, high = 0, len(self.values);
+		if high <= low: return False;
+
+		while low < high:
+			mid = (low + high - 1) / 2;
+			ml, mh = _range(self.values[mid]);
+			if x < ml: high = mid;
+			elif x > mh: low = mid + 1;
+			else: return True;
+
+		return False;
+	
+	def __or__(self, other):
+		return self.union(other);
+	
+	def __and__(self, other):
+		return self.intersection(other);
 
 	def empty(self):
 		return not self.values;
@@ -61,7 +80,7 @@ class TerminalSet(object):
 			skip_clean = True
 		);
 	
-	def intersect(self, other):
+	def intersection(self, other):
 		left, right = self.values, other.values;
 		if not self.values: return self;
 		if not other.values: return other;
@@ -98,4 +117,4 @@ class TerminalSet(object):
 		return TerminalSet(*out, skip_clean = True);
 	
 	def subtract(self, other):
-		return self.intersect(other.complement(self.min(), self.max()));
+		return self.intersection(other.complement(self.min(), self.max()));

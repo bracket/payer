@@ -1,12 +1,9 @@
-# # from ADT import Type, ADT.Matcher, var, _;
-# # from TerminalSet import TerminalSet;
-# # from TriBool import *;
-
-import ADT, TerminalSet, Action, TriBool, Memo;
+import ADT, Action, TriBool, Memo;
 from ADT import var, _;
 from TriBool import and_, or_, True_, False_, Maybe_;
 from itertools import product;
 from Action import ActionGenerator, ActionList;
+from TerminalSet import TerminalSet;
 
 memo = Memo.SharedMemo();
 
@@ -26,7 +23,7 @@ def Div(): return ();
 
 @memo
 @Language
-def Literal(): return (str,);
+def TerminalSequence(): return ([TerminalSet],);
 
 @memo
 @Language
@@ -58,8 +55,8 @@ def epsilon(): return Epsilon();
 
 def div(): return Div();
 
-def literal(x):
-	if x: return Literal(x);
+def terminal_sequence(x):
+	if x: return TerminalSequence(x);
 	else: return Epsilon();
 
 @ADT.Matcher
@@ -90,8 +87,8 @@ def concat(add):
 	@add(Div(), Div())
 	def f(): return Div();
 
-	@add(Literal(var('x')), Literal(var('y')))
-	def f(x, y): return literal(x + y);
+	@add(TerminalSequence(var('x')), TerminalSequence(var('y')))
+	def f(x, y): return terminal_sequence(x + y);
 
 	@add(SemanticAction(var('g'), var('M')), var('N'))
 	def f(g, M, N): return semantic_action(g, concat(M, N))
@@ -119,59 +116,73 @@ class LanguageSpace(object):
 		if nullspace: self.nullspace = nullspace;
 		else: self.nullspace = { };
 
-	def nullable(self, L):
-		return TriBool.to_bool(self.nullable_(L));
-	
 	def __getitem__(self, key):
+		if isinstance(key, str): key = ref(key);
 		return self.namespace[key];
 	
 	def __setitem__(self, key, value):
-		self.namespace[key] = value;
+		if isinstance(key, str): key = ref(key);
+		out = self.namespace[key] = value;
+		return out;
+
+	def nullable(self, L):
+		maybes = set();
+		out = Maybe_();
+		while out is Maybe_():
+			maybes.clear();
+			out = self.nullable_(maybes, L);
+		return TriBool.to_bool(out);
 
 	@ADT.Matcher
 	def nullable_(add):
-		@add(_, Null())
+		@add(_, _, Null())
 		def f(): return False_();
 
-		@add(_, Epsilon())
+		@add(_, _, Epsilon())
 		def f(): return True_();
 
-		@add(_, Div())
+		@add(_, _, Div())
 		def f(): return True_();
 
-		@add(_, Literal(_))
+		@add(_, _, TerminalSequence(_))
 		def f(): return False_();
 
-		@add(var('self'), Union(var('x'), var('y')))
-		def f(self, x, y): return or_(self.nullable_(x), self.nullable_(y));
+		@add(var('self'), var('maybes'), Union(var('x'), var('y')))
+		def f(self, maybes, x, y):
+			return or_(self.nullable_(maybes, x), self.nullable_(maybes, y));
 
-		@add(var('self'), Concat(var('x'), var('y')))
-		def f(self, x, y): return and_(self.nullable_(x), self.nullable_(y));
+		@add(var('self'), var('maybes'), Concat(var('x'), var('y')))
+		def f(self, maybes, x, y):
+			return and_(self.nullable_(maybes, x), self.nullable_(maybes, y));
 
-		@add(_, Repeat(_))
+		@add(_, _, Repeat(_))
 		def f(): return True_();
 
 		@add(var('self'), SemanticAction(_, var('L')))
 		def f(self, L): return self.nullable_(L);
 
-		@add(var('self'), Ref(var('name')))
-		def f(self, name):
+		@add(var('self'), var('maybes'), Ref(var('name')))
+		def f(self, maybes, name):
 			l = Ref(name);
-			r = self.nullspace.get(l, None)
-			if r is not None: return r;
+			r = self.nullspace.get(l, None);
 
-			self.nullspace[l] = Maybe_();
-			r = self.nullspace[l] = self.nullable_(self.namespace[l]);
+			if r is not None: return r;
+			if l in maybes: return Maybe_();
+
+			maybes.add(l);
+			r = self.nullspace[l] = self.nullable_(maybes, self.namespace[l]);
 			return r;
 		
-		@add(var('self'), Derivative(var('s'), var('L')))
-		def f(self, s, L):
+		@add(var('self'), var('maybes'), Derivative(var('s'), var('L')))
+		def f(self, maybes, s, L):
 			l = Derivative(s, L);
 			r = self.nullspace.get(l, None);
-			if r is not None: return r;
 
-			self.nullspace[l] = Maybe_();
-			r = self.nullspace[l] = self.nullable_(self.namespace[l]);
+			if r is not None: return r;
+			if l in maybes: return Maybe_();
+
+			maybes.add(l);
+			r = self.nullspace[l] = self.nullable_(maybes, self.namespace[l]);
 			return r;
 
 	@ADT.Matcher
@@ -185,8 +196,9 @@ class LanguageSpace(object):
 		@add(_, _, Div())
 		def f(): return null();
 
-		@add(_, var('c'), Literal(var('x')))
-		def f(c, x): return literal(x[1:]) if c == x[0] else null();
+		@add(_, var('c'), TerminalSequence(var('x')))
+		def f(c, x):
+			return terminal_sequence(x[1:]) if c in x[0] else null();
 
 		@add(var('self'), var('c'), Union(var('x'), var('y')))
 		def f(self, c, x, y): return union(self.delayed_derivative(c, x), self.delayed_derivative(c, y));
@@ -273,12 +285,11 @@ def derivative_set(add):
 	@add(var('s'), Epsilon())
 	def f(s): return [(s, null())];
 
-	@add(var('s'), Literal(var('x')))
+	@add(var('s'), TerminalSequence(var('x')))
 	def f(s, x):
-		t = TerminalSet(x[0]);
 		return [
-				(t, literal(x[1:])),
-				(s.subtract(t), null())
+				(t, terminal_sequence(x[1:])),
+				(s.subtract(x[0]), null())
 			];
 
 	@add(var('s'), Union(var('x'), var('y')))
@@ -286,7 +297,7 @@ def derivative_set(add):
 		out = [];
 
 		for (ls, l), (rs, r) in product(derivative_set(s, x), derivative_set(s, y)):
-			t = ls.intersect(rs);
+			t = ls & rs;
 			if t.empty(): continue;
 			out.append((t, union(l, r)));
 		return out;
@@ -296,7 +307,7 @@ def derivative_set(add):
 		out = [];
 		if nullable(x):
 			for (ls, l), (rs, r) in product(derivative_set(s, x), derivative_set(s, y)):
-				t = ls.intersect(rs);
+				t = ls & rs;
 				if t.empty(): continue;
 				out.append((t, union(concat(l, y), r)));
 		else:
