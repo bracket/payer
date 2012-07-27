@@ -126,11 +126,20 @@ class LanguageSpace(object):
 		return out;
 
 	def nullable(self, L):
-		maybes = set();
-		out = Maybe_();
-		while out is Maybe_():
-			maybes.clear();
-			out = self.nullable_(maybes, L);
+		ping = set(); pong = set();
+		out = self.nullable_(ping, L);
+
+		while out is Maybe_() and ping != pong:
+			pong.clear();
+			out = self.nullable_(pong, L);
+			(ping, pong) = (pong, ping);
+
+		if out is Maybe_(): out = False_();
+		else:
+			for k in ping:
+				if self.nullspace.get(k, Maybe_()) is Maybe_():
+					self.nullspace[k] = False_();
+
 		return TriBool.to_bool(out);
 
 	@ADT.Matcher
@@ -147,42 +156,42 @@ class LanguageSpace(object):
 		@add(_, _, TerminalSequence(_))
 		def f(): return False_();
 
-		@add(var('self'), var('maybes'), Union(var('x'), var('y')))
-		def f(self, maybes, x, y):
-			return or_(self.nullable_(maybes, x), self.nullable_(maybes, y));
+		@add(var('self'), var('traversed'), Union(var('x'), var('y')))
+		def f(self, traversed, x, y):
+			return or_(self.nullable_(traversed, x), self.nullable_(traversed, y));
 
-		@add(var('self'), var('maybes'), Concat(var('x'), var('y')))
-		def f(self, maybes, x, y):
-			return and_(self.nullable_(maybes, x), self.nullable_(maybes, y));
+		@add(var('self'), var('traversed'), Concat(var('x'), var('y')))
+		def f(self, traversed, x, y):
+			return and_(self.nullable_(traversed, x), self.nullable_(traversed, y));
 
 		@add(_, _, Repeat(_))
 		def f(): return True_();
 
-		@add(var('self'), SemanticAction(_, var('L')))
-		def f(self, L): return self.nullable_(L);
+		@add(var('self'), var('traversed'), SemanticAction(_, var('L')))
+		def f(self, L): return self.nullable_(traversed, L);
 
-		@add(var('self'), var('maybes'), Ref(var('name')))
-		def f(self, maybes, name):
+		@add(var('self'), var('traversed'), Ref(var('name')))
+		def f(self, traversed, name):
 			l = Ref(name);
-			r = self.nullspace.get(l, None);
+			r = self.nullspace.get(l, Maybe_());
 
-			if r is not None: return r;
-			if l in maybes: return Maybe_();
-
-			maybes.add(l);
-			r = self.nullspace[l] = self.nullable_(maybes, self.namespace[l]);
+			if r is not Maybe_(): return r;
+			if l in traversed: return Maybe_();
+			
+			traversed.add(l);
+			r = self.nullspace[l] = self.nullable_(traversed, self.namespace[l]);
 			return r;
 		
-		@add(var('self'), var('maybes'), Derivative(var('s'), var('L')))
-		def f(self, maybes, s, L):
+		@add(var('self'), var('traversed'), Derivative(var('s'), var('L')))
+		def f(self, traversed, s, L):
 			l = Derivative(s, L);
-			r = self.nullspace.get(l, None);
+			r = self.nullspace.get(l, Maybe_());
 
-			if r is not None: return r;
-			if l in maybes: return Maybe_();
+			if r is not Maybe_(): return r;
+			if l in traversed: return Maybe_();
 
-			maybes.add(l);
-			r = self.nullspace[l] = self.nullable_(maybes, self.namespace[l]);
+			traversed.add(l);
+			r = self.nullspace[l] = self.nullable_(traversed, self.namespace[l]);
 			return r;
 
 	@ADT.Matcher
@@ -225,8 +234,8 @@ class LanguageSpace(object):
 			r = self.namespace[d] = self.derivative(c, self.namespace[l]);
 			return r;
 
-		@add(var('c'), Derivative(var('s'), var('L')))
-		def f(c, s, L):
+		@add(var('self'), var('c'), Derivative(var('s'), var('L')))
+		def f(self, c, s, L):
 			l = Derivative(s, L);
 			d = Derivative(s + c, L);
 			r = self.namespace.get(d, None);
@@ -234,7 +243,6 @@ class LanguageSpace(object):
 
 			self.namespace[d] = d;
 			r = self.namespace[d] = self.derivative(c, self.namespace[l]);
-
 			return r;
 
 	@ADT.Matcher
