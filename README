@@ -1,0 +1,3 @@
+PAYER is a derivative based parser/parser generator library written in Python.
+It aims to provided a flexible framework for working with the three primary
+problem areas in language transformation: parsing, analysis, and generation.
