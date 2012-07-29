@@ -1,4 +1,6 @@
 * change algebraic types into actual python types, not just tuples
+	* It would also be nice if we could detect falling off the end of pattern
+		matching before runtime errors..
 * pretty printer for algebraic data types
 * change commuative language term operations (ie, Union), to only store unique terms
 * add empty set detection for references and derivatives

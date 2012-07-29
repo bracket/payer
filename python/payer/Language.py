@@ -27,7 +27,7 @@ def TerminalSequence(): return ([TerminalSet],);
 
 @memo
 @Language
-def Union(): return (Language, Language);
+def Union(): return (frozenset(),)
 
 @memo
 @Language
@@ -67,8 +67,17 @@ def union(add):
 	@add(var('x'), Null())
 	def f(x): return x;
 
+	@add(Union(var('x')), Union(var('y')))
+	def f(x, y): return Union(x | y);
+
+	@add(var('x'), Union(var('y')))
+	def f(x, y): return Union(frozenset(x) | y);
+
+	@add(Union(var('x')), var('y'))
+	def f(x, y): return Union(x | frozenset(y));
+
 	@add(var('x'), var('y'))
-	def f(x, y): return Union(x, y);
+	def f(x, y): return Union(frozenset((x, y)));
 
 @ADT.Matcher
 def concat(add):
@@ -108,6 +117,30 @@ def semantic_action(add):
 
 def ref(name): return Ref(name);
 
+@ADT.Matcher
+def _pretty_print(add):
+	@add(var('indent'), TerminalSequence(var('x')))
+	def f(indent, x): print '%sTerminalSequence(%s)' % (indent, ', '.join(map(str, x)));
+
+	@add(var('indent'), Union(var('x')))
+	def f(indent, x):
+		print '%sUnion' % indent;
+		indent += '    ';
+		for t in x: _pretty_print(indent, t);
+	
+	@add(var('indent'), var('x'))
+	def f(indent, x):
+		if isinstance(x, tuple):
+			print '%s%s' % (indent, str(x[0]));
+			if len(x) > 1:
+				indent += '    ';
+				for y in x[1:]: _pretty_print(indent, y);
+		else: print '%s%s' % (indent, str(x))
+
+
+def pretty_print(term, indent = ''):
+	_pretty_print(indent, term);
+	
 class LanguageSpace(object):
 	def __init__(self, namespace = None, nullspace = None):
 		if namespace: self.namespace = namespace;
@@ -156,9 +189,9 @@ class LanguageSpace(object):
 		@add(_, _, TerminalSequence(_))
 		def f(): return False_();
 
-		@add(var('self'), var('traversed'), Union(var('x'), var('y')))
-		def f(self, traversed, x, y):
-			return or_(self.nullable_(traversed, x), self.nullable_(traversed, y));
+		@add(var('self'), var('traversed'), Union(var('x')))
+		def f(self, traversed, x):
+			return reduce(or_, (self.nullable_(traversed, t) for t in x));
 
 		@add(var('self'), var('traversed'), Concat(var('x'), var('y')))
 		def f(self, traversed, x, y):
@@ -209,8 +242,9 @@ class LanguageSpace(object):
 		def f(c, x):
 			return terminal_sequence(x[1:]) if c in x[0] else null();
 
-		@add(var('self'), var('c'), Union(var('x'), var('y')))
-		def f(self, c, x, y): return union(self.delayed_derivative(c, x), self.delayed_derivative(c, y));
+		@add(var('self'), var('c'), Union(var('x')))
+		def f(self, c, x):
+			return reduce(union, (self.delayed_derivative(c, t) for t in x));
 
 		@add(var('self'), var('c'), Concat(var('x'), var('y')))
 		def f(self, c, x, y):
@@ -253,8 +287,9 @@ class LanguageSpace(object):
 		@add(var('self'), var('c'), SemanticAction(var('x'), var('L')))
 		def f(self, c, x, L): return semantic_action(Action.delay_action(x), self.delayed_derivative(c, L));
 
-		@add(var('self'), var('c'), Union(var('x'), var('y')))
-		def f(self, c, x, y): return union(self.delayed_derivative(c, x), self.delayed_derivative(c, y));
+		@add(var('self'), var('c'), Union(var('x')))
+		def f(self, c, x):
+			return reduce(union, (self.delayed_derivative(c, t) for t in x));
 
 		@add(var('self'), var('c'), Concat(var('x'), var('y')))
 		def f(self, c, x, y):
@@ -300,7 +335,7 @@ def derivative_set(add):
 				(s.subtract(x[0]), null())
 			];
 
-	@add(var('s'), Union(var('x'), var('y')))
+	@add(var('s'), Union(var('x')))
 	def f(s, x, y):
 		out = [];
 

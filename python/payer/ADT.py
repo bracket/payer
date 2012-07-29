@@ -71,12 +71,3 @@ class Matcher(object):
 	def __get__(self, other, other_type):
 		def f(*args): return self.__call__(other, *args);
 		return f;
-
-def pretty_print(x, indent = 0):
-	if isinstance(x, tuple) and x:
-		print '%s%s' % (' ' * indent, str(x[0]));
-
-		if any(isinstance(y, tuple) for y in x):
-			for y in x[1:]: pretty_print(y, indent + 4);
-		elif len(x) > 1: print '%s%s' % (' ' * indent, ', '.join(x[1:]));
-	elif x: print '%s%s' % (indent, str(x));
