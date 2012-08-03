@@ -27,7 +27,7 @@ def TerminalSequence(): return ([TerminalSet],);
 
 @memo
 @Language
-def Union(): return (frozenset(),)
+def Union(): return ([TerminalSet],);
 
 @memo
 @Language
@@ -59,6 +59,9 @@ def terminal_sequence(x):
 	if x: return TerminalSequence(x);
 	else: return Epsilon();
 
+def _unique_tuple(x):
+	return tuple(sorted(set(x)));
+
 @ADT.Matcher
 def union(add):
 	@add(Null(), var('x'))
@@ -68,16 +71,19 @@ def union(add):
 	def f(x): return x;
 
 	@add(Union(var('x')), Union(var('y')))
-	def f(x, y): return Union(x | y);
+	def f(x, y): return Union(_unique_tuple(x + y));
 
 	@add(var('x'), Union(var('y')))
-	def f(x, y): return Union(frozenset(x) | y);
+	def f(x, y): return Union(_unique_tuple((x,) + y));
 
 	@add(Union(var('x')), var('y'))
-	def f(x, y): return Union(x | frozenset(y));
+	def f(x, y): return Union(_unique_tuple(x + (y,)));
 
 	@add(var('x'), var('y'))
-	def f(x, y): return Union(frozenset((x, y)));
+	def f(x, y): 
+		if x < y: return Union((x, y));
+		elif y < x: return Union((y, x));
+		else: return x;
 
 @ADT.Matcher
 def concat(add):

@@ -1,6 +1,8 @@
 from itertools import izip, starmap;
 import inspect;
+from functools import total_ordering;
 
+@total_ordering
 class Type(object):
 	def __init__(self, constructor):
 		self.constructor = constructor;
@@ -16,6 +18,12 @@ class Type(object):
 	
 	def __repr__(self):
 		return self.__name__;
+	
+	def __eq__(self, other):
+		return self.__name__ == other.__name__;
+	
+	def __lt__(self, other):
+		return self.__name__ < other.__name__;
 	
 class Placeholder(object):
 	def __init__(self, name):
