@@ -23,15 +23,15 @@ def Div(): return ();
 
 @memo
 @Language
-def TerminalSequence(): return ([TerminalSet],);
+def Terminals(): return (TerminalSet,);
 
 @memo
 @Language
-def Union(): return ([TerminalSet],);
+def Union(): return ([Language],);
 
 @memo
 @Language
-def Concat(): return (Language, Language);
+def Concat(): return ([Language]);
 
 @memo
 @Language
@@ -39,7 +39,7 @@ def Repeat(): return (Language,);
 
 @memo
 @Language
-def SemanticAction(): return (Action, Language);
+def SemanticAction(): return (Action,);
 
 @memo
 @Language
@@ -49,18 +49,18 @@ def Ref(): return (str,);
 @Language
 def Derivative(): return (str, Language);
 
+def _unique_tuple(x):
+	return tuple(sorted(set(x)));
+
 def null(): return Null();
 
 def epsilon(): return Epsilon();
 
 def div(): return Div();
 
-def terminal_sequence(x):
-	if x: return TerminalSequence(x);
+def terminals(x):
+	if x: return Terminals(x);
 	else: return Epsilon();
-
-def _unique_tuple(x):
-	return tuple(sorted(set(x)));
 
 @ADT.Matcher
 def union(add):
@@ -102,35 +102,38 @@ def concat(add):
 	@add(Div(), Div())
 	def f(): return Div();
 
-	@add(TerminalSequence(var('x')), TerminalSequence(var('y')))
-	def f(x, y): return terminal_sequence(x + y);
+	@add(Concat(var('x')), Concat(var('y')))
+	def f(x, y): return Concat(x + y);
 
-	@add(SemanticAction(var('g'), var('M')), var('N'))
-	def f(g, M, N): return semantic_action(g, concat(M, N))
+	@add(var('x'), Concat(var('y')))
+	def f(x, y): return Concat((x,) + y);
+
+	@add(Concat(var('x')), var('y'))
+	def f(x, y): return Concat(x + (y,));
 
 	@add(var('x'), var('y'))
-	def f(x, y): return Concat(x, y);
+	def f(x, y): return Concat((x, y));
 
 def repeat(L): return Repeat(L);
 
-@ADT.Matcher
-def semantic_action(add):
-	@add(_, Null())
-	def f(): return null();
-
-	@add(var('g'), var('L'))
-	def f(g, L): return SemanticAction(g, L);
+def semantic_action(g): return SemanticAction(g);
 
 def ref(name): return Ref(name);
 
 @ADT.Matcher
 def _pretty_print(add):
-	@add(var('indent'), TerminalSequence(var('x')))
-	def f(indent, x): print '%sTerminalSequence(%s)' % (indent, ', '.join(map(str, x)));
+	@add(var('indent'), Terminals(var('x')))
+	def f(indent, x): print '%sTerminals(%s)' % (indent, str(x));
 
 	@add(var('indent'), Union(var('x')))
 	def f(indent, x):
 		print '%sUnion' % indent;
+		indent += '    ';
+		for t in x: _pretty_print(indent, t);
+	
+	@add(var('indent'), Concat(var('x')))
+	def f(indent, x):
+		print '%sConcat' % indent;
 		indent += '    ';
 		for t in x: _pretty_print(indent, t);
 	
@@ -143,9 +146,13 @@ def _pretty_print(add):
 				for y in x[1:]: _pretty_print(indent, y);
 		else: print '%s%s' % (indent, str(x))
 
-
 def pretty_print(term, indent = ''):
 	_pretty_print(indent, term);
+
+def _sublists(l):
+	n = len(l);
+	for i in xrange(n):
+		yield l[i], l[i+1:n];
 	
 class LanguageSpace(object):
 	def __init__(self, namespace = None, nullspace = None):
@@ -192,22 +199,19 @@ class LanguageSpace(object):
 		@add(_, _, Div())
 		def f(): return True_();
 
-		@add(_, _, TerminalSequence(_))
+		@add(_, _, Terminals(_))
 		def f(): return False_();
 
 		@add(var('self'), var('traversed'), Union(var('x')))
 		def f(self, traversed, x):
 			return reduce(or_, (self.nullable_(traversed, t) for t in x));
 
-		@add(var('self'), var('traversed'), Concat(var('x'), var('y')))
-		def f(self, traversed, x, y):
-			return and_(self.nullable_(traversed, x), self.nullable_(traversed, y));
+		@add(var('self'), var('traversed'), Concat(var('x')))
+		def f(self, traversed, x):
+			return reduce(and_, (self.nullable_(traversed, t) for t in x));
 
 		@add(_, _, Repeat(_))
 		def f(): return True_();
-
-		@add(var('self'), var('traversed'), SemanticAction(_, var('L')))
-		def f(self, L): return self.nullable_(traversed, L);
 
 		@add(var('self'), var('traversed'), Ref(var('name')))
 		def f(self, traversed, name):
@@ -244,24 +248,32 @@ class LanguageSpace(object):
 		@add(_, _, Div())
 		def f(): return null();
 
-		@add(_, var('c'), TerminalSequence(var('x')))
+		@add(_, var('c'), Terminals(var('x')))
 		def f(c, x):
-			return terminal_sequence(x[1:]) if c in x[0] else null();
+			if c in x: return epsilon();
+			else: return null();
 
 		@add(var('self'), var('c'), Union(var('x')))
 		def f(self, c, x):
-			return reduce(union, (self.delayed_derivative(c, t) for t in x));
+			return reduce(union, (self.derivative(c, t) for t in x));
 
-		@add(var('self'), var('c'), Concat(var('x'), var('y')))
-		def f(self, c, x, y):
-			if self.nullable(x): return union(concat(self.derivative(c, x), y), self.derivative(c, y));
-			else: return concat(self.derivative(c, x), y);
+		@add(var('self'), var('c'), Concat(var('x')))
+		def f(self, c, x):
+			L = null();
+			for h, t in _sublists(x):
+				n = len(t);
+
+				if n > 1: L = union(L, concat(self.derivative(c, h), Concat(t)))
+				elif n == 1: L = union(L, concat(self.derivative(c, h), t[0]));
+				else: L = union(L, self.derivative(c, h));
+
+				if not self.nullable(h): return L;
 		
 		@add(var('self'), var('c'), Repeat(var('x')))
 		def f(self, c, x): return concat(self.derivative(c, x), repeat(x));
 
-		@add(var('self'), var('c'), SemanticAction(var('x'), var('L')))
-		def f(self, c, x, L): dispatch_action(x); return self.derivative(c, L);
+		@add(var('self'), var('c'), SemanticAction(var('x')))
+		def f(self, c, x): dispatch_action(x); return epsilon();
 
 		@add(var('self'), var('c'), Ref(var('name')))
 		def f(self, c, name):
@@ -285,85 +297,85 @@ class LanguageSpace(object):
 			r = self.namespace[d] = self.derivative(c, self.namespace[l]);
 			return r;
 
-	@ADT.Matcher
-	def delayed_derivative(add):
-		@add(var('self'), var('c'), SemanticAction(var('x'), SemanticAction(var('y'), var('L'))))
-		def f(self, c, x, y, L): return self.delayed_derivative(c, SemanticAction(Action.combine_delay(x, y), L));
+#	@ADT.Matcher
+#	def delayed_derivative(add):
+#		@add(var('self'), var('c'), SemanticAction(var('x'), SemanticAction(var('y'), var('L'))))
+#		def f(self, c, x, y, L): return self.delayed_derivative(c, SemanticAction(Action.combine_delay(x, y), L));
+#
+#		@add(var('self'), var('c'), SemanticAction(var('x'), var('L')))
+#		def f(self, c, x, L): return semantic_action(Action.delay_action(x), self.delayed_derivative(c, L));
+#
+#		@add(var('self'), var('c'), Union(var('x')))
+#		def f(self, c, x):
+#			return reduce(union, (self.delayed_derivative(c, t) for t in x));
+#
+#		@add(var('self'), var('c'), Concat(var('x'), var('y')))
+#		def f(self, c, x, y):
+#			if self.nullable(x): return union(concat(self.delayed_derivative(c, x), y), self.delayed_derivative(c, y));
+#			else: return concat(self.delayed_derivative(c, x), y);
+#		
+#		@add(var('self'), var('c'), Repeat(var('x')))
+#		def f(self, c, x): return concat(self.delayed_derivative(c, x), repeat(x));
+#
+#		@add(var('self'), var('c'), var('L'))
+#		def f(self, c, L): return self.derivative(c, L);
 
-		@add(var('self'), var('c'), SemanticAction(var('x'), var('L')))
-		def f(self, c, x, L): return semantic_action(Action.delay_action(x), self.delayed_derivative(c, L));
+#@ADT.Matcher
+#def dispatch_outer(add):
+#	@add(SemanticAction(ActionList(var('t'))))
+#	def f(t, L):
+#		for x in t: x();
+#		return dispatch_outer(L);
+#	
+#	@add(var('L'))
+#	def f(L): return L;
 
-		@add(var('self'), var('c'), Union(var('x')))
-		def f(self, c, x):
-			return reduce(union, (self.delayed_derivative(c, t) for t in x));
+#@ADT.Matcher
+#def dispatch_to_div(add):
+#	@add(SemanticAction(var('g'), Concat(Div(), var('L'))))
+#	def f(g, L): dispatch_action(g); return L;
+#
+#	@add(var('L'))
+#	def f(L): return L;
 
-		@add(var('self'), var('c'), Concat(var('x'), var('y')))
-		def f(self, c, x, y):
-			if self.nullable(x): return union(concat(self.delayed_derivative(c, x), y), self.delayed_derivative(c, y));
-			else: return concat(self.delayed_derivative(c, x), y);
-		
-		@add(var('self'), var('c'), Repeat(var('x')))
-		def f(self, c, x): return concat(self.delayed_derivative(c, x), repeat(x));
-
-		@add(var('self'), var('c'), var('L'))
-		def f(self, c, L): return self.derivative(c, L);
-
-@ADT.Matcher
-def dispatch_outer(add):
-	@add(SemanticAction(ActionList(var('t')), var('L')))
-	def f(t, L):
-		for x in t: x();
-		return dispatch_outer(L);
-	
-	@add(var('L'))
-	def f(L): return L;
-
-@ADT.Matcher
-def dispatch_to_div(add):
-	@add(SemanticAction(var('g'), Concat(Div(), var('L'))))
-	def f(g, L): dispatch_action(g); return L;
-
-	@add(var('L'))
-	def f(L): return L;
-
-@ADT.Matcher
-def derivative_set(add):
-	@add(var('s'), Null())
-	def f(s): return [(s, null())]
-
-	@add(var('s'), Epsilon())
-	def f(s): return [(s, null())];
-
-	@add(var('s'), TerminalSequence(var('x')))
-	def f(s, x):
-		return [
-				(t, terminal_sequence(x[1:])),
-				(s.subtract(x[0]), null())
-			];
-
-	@add(var('s'), Union(var('x')))
-	def f(s, x, y):
-		out = [];
-
-		for (ls, l), (rs, r) in product(derivative_set(s, x), derivative_set(s, y)):
-			t = ls & rs;
-			if t.empty(): continue;
-			out.append((t, union(l, r)));
-		return out;
-	
-	@add(var('s'), Concat(var('x'), var('y')))
-	def f(s, x, y):
-		out = [];
-		if nullable(x):
-			for (ls, l), (rs, r) in product(derivative_set(s, x), derivative_set(s, y)):
-				t = ls & rs;
-				if t.empty(): continue;
-				out.append((t, union(concat(l, y), r)));
-		else:
-			for (t, l) in derivative_set(s, x):
-				out.append((t, concat(l, y)));
-		return out;
-	
-	@add(var('s'), Repeat(var('x')))
-	def f(s, x):
-		return [(t, concat(l, repeat(x))) for t,l in derivative_set(s, x)];
+#@ADT.Matcher
+#def derivative_set(add):
+#	@add(var('s'), Null())
+#	def f(s): return [(s, null())]
+#
+#	@add(var('s'), Epsilon())
+#	def f(s): return [(s, null())];
+#
+#	@add(var('s'), TerminalSequence(var('x')))
+#	def f(s, x):
+#		return [
+#				(t, terminal_sequence(x[1:])),
+#				(s.subtract(x[0]), null())
+#			];
+#
+#	@add(var('s'), Union(var('x')))
+#	def f(s, x, y):
+#		out = [];
+#
+#		for (ls, l), (rs, r) in product(derivative_set(s, x), derivative_set(s, y)):
+#			t = ls & rs;
+#			if t.empty(): continue;
+#			out.append((t, union(l, r)));
+#		return out;
+#	
+#	@add(var('s'), Concat(var('x'), var('y')))
+#	def f(s, x, y):
+#		out = [];
+#		if nullable(x):
+#			for (ls, l), (rs, r) in product(derivative_set(s, x), derivative_set(s, y)):
+#				t = ls & rs;
+#				if t.empty(): continue;
+#				out.append((t, union(concat(l, y), r)));
+#		else:
+#			for (t, l) in derivative_set(s, x):
+#				out.append((t, concat(l, y)));
+#		return out;
+#	
+#	@add(var('s'), Repeat(var('x')))
+#	def f(s, x):
+#		return [(t, concat(l, repeat(x))) for t,l in derivative_set(s, x)];
