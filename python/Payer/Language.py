@@ -5,7 +5,7 @@ __all__ = [
     'null', 'epsilon', 'terminals',
     'output', 'output_node', 'union', 'concat', 'repeat',
     'nullable', 'nullity',
-	'derivative', 'finalize',
+    'derivative', 'finalize',
     'pretty_print', 'get_outputs',
 ];
 
@@ -229,31 +229,31 @@ def derivative(add):
 
 @Matcher
 def finalize(add):
-	@add((Null,))
-	def f(): return null();
+    @add((Null,))
+    def f(): return null();
 
-	@add((Epsilon,))
-	def f(): return epsilon();
+    @add((Epsilon,))
+    def f(): return epsilon();
 
-	@add((Terminals, _))
-	def f(): return null();
+    @add((Terminals, _))
+    def f(): return null();
 
-	@add((Union, var('Ls')))
-	def f(Ls): return reduce(union, (finalize(L) for L in Ls));
+    @add((Union, var('Ls')))
+    def f(Ls): return reduce(union, (finalize(L) for L in Ls));
 
-	@add((Concat, var('Ls')))
-	def f(Ls): 
-		out = null();
-		for L in Ls:
-			if not nullable(L): break;
-			out = union(out, finalize(L));
-		return out;
-	
-	@add((Repeat, var('L')))
-	def f(L): return finalize(L);
+    @add((Concat, var('Ls')))
+    def f(Ls): 
+        out = null();
+        for L in Ls:
+            if not nullable(L): break;
+            out = union(out, finalize(L));
+        return out;
+    
+    @add((Repeat, var('L')))
+    def f(L): return finalize(L);
 
-	@add((Output, var('t'), var('L')))
-	def f(t, L): return output_node(OutputNode(t), finalize(L));
+    @add((Output, var('t'), var('L')))
+    def f(t, L): return output_node(OutputNode(t), finalize(L));
 
-	@add((OutputNode, var('node'), var('L')))
-	def f(node, L): return output_node(node, finalize(L));
+    @add((OutputNode, var('node'), var('L')))
+    def f(node, L): return output_node(node, finalize(L));
