@@ -1,3 +1,14 @@
-PAYER is a derivative based parser/parser generator library written in Python.
-It aims to provided a flexible framework for working with the three primary
-problem areas in language transformation: parsing, analysis, and generation.
+Payer is a parser/parser generator library written in Python.  It aims to
+provide a flexible framework for parsing regular and context free languages
+with varying levels of grammatical ambiguity, while allowing for modular
+grammars which are programmatically modifiable within Python.
+
+Payer consists of two parts: Matcher, a library which can be used to write
+pattern matching function definitions a la functional languages such as ML,
+Haskell, or Mathematica, and Payer, itself, which uses Matcher to implement
+pattern matching algorithms on symbolic representations of languages.
+
+For a simple usage example see samples/hello_world.py.
+
+Or read this instructive paper to get an idea of what derivative based parsing
+is all about: http://matt.might.net/papers/might2011derivatives.pdf
