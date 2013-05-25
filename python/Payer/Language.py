@@ -255,7 +255,7 @@ def finalize(add):
         return out;
     
     @add((Repeat, var('L')))
-    def f(L): return finalize(L);
+    def f(L): return union(epsilon(), finalize(L));
 
     @add((Output, var('t'), var('L')))
     def f(t, L): return output_node(OutputNode(t), finalize(L));

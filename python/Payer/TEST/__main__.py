@@ -28,7 +28,7 @@ class TestTransitionFunction(unittest.TestCase):
 
 class TestPayer(unittest.TestCase):
     def test_language_operators(self):
-        x, y, z = (terminals((ord(t),)) for t in 'xyz');
+        x, y, z = (terminals([ord(t)]) for t in 'xyz');
 
         tests = [
             (union(null(), null()), null()),
@@ -45,7 +45,7 @@ class TestPayer(unittest.TestCase):
             self.assertEqual(actual, expected);
 
     def test_nullable(self):
-        x, y, z = (terminals((ord(t),)) for t in 'xyz');
+        x, y, z = (terminals([ord(t)]) for t in 'xyz');
 
         tests = [
             (null(), False),
@@ -63,7 +63,7 @@ class TestPayer(unittest.TestCase):
             self.assertEqual(nullable(value), expected);
 
     def test_derivative(self):
-        x, y, z = (terminals((ord(t),)) for t in 'xyz');
+        x, y, z = (terminals([ord(t)]) for t in 'xyz');
         xy = concat(x, y);
 
         tests = [
@@ -84,6 +84,22 @@ class TestPayer(unittest.TestCase):
             for token, expected in zip(tokens, expecteds):
                 value = derivative(ord(token), value);
                 self.assertEqual(value, expected);
+
+    def test_finalize(self):
+        x, y, z = (terminals([ord(t)]) for t in 'xyz');
+
+        tests = [
+            (null(), null()),
+            (epsilon(), epsilon()),
+            (x, null()),
+            (union(x, epsilon()), epsilon()),
+            (concat(x, y), null()),
+            (repeat(x), epsilon()),
+            (output(1, x), null()),
+        ];
+
+        for value, expected in tests:
+            self.assertEqual(finalize(value), expected);
 
     def test_output(self):
         x,y,z = (terminals((ord(t),)) for t in 'xyz');
