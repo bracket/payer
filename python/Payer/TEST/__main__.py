@@ -1,11 +1,11 @@
 import unittest;
-from Payer.TransitionFunction import TransitionPair, TransitionFunction;
+
+from Payer.TransitionFunction import *;
 from Payer.Language import *;
 
 class TestTransitionFunction(unittest.TestCase):
     def test_transition_function(self):
-        f = [ (2, 'x'), (6, 'z'), (4, 'y'), ];
-        f = TransitionFunction(TransitionPair(*p) for p in f);
+        f = TransitionFunction.from_items([ (2, 'x'), (6, 'z'), (4, 'y') ]);
 
         expected = [
             (1, 'x'), (2, 'x'), (3, 'y'),
@@ -16,6 +16,15 @@ class TestTransitionFunction(unittest.TestCase):
         actual = [ (i, f(i)) for i in range(1, 8) ];
 
         self.assertEqual(actual, expected);
+
+    def test_compaction(self):
+        f = TransitionFunction.from_items([ (2, 'x'), (3, 'y'), (10, 'y'),
+            (15, 'z'), (30, 'y'), (35, 'z') ])
+
+        g = TransitionFunction.from_items([ (2, 'x'), (10, 'y'), (15, 'z'),
+            (30, 'y'), (35, 'z') ]);
+
+        self.assertEqual(f.compact(), g);
 
 class TestPayer(unittest.TestCase):
     def test_language_operators(self):
@@ -29,6 +38,7 @@ class TestPayer(unittest.TestCase):
             (concat(null(), y), null()),
             (concat(x, epsilon()), x),
             (concat(epsilon(), y), y),
+            (union(x, y), terminals(map(ord, 'xy'))),
         ];
 
         for actual, expected in tests:

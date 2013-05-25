@@ -1,3 +1,8 @@
+__all__ = [
+    'TransitionPair', 'TransitionFunction',
+    'indicator', 'merge'
+];
+
 class TransitionPair(object):
     def __init__(self, terminal, value):
         self.terminal = terminal;
@@ -41,6 +46,9 @@ class TransitionFunction(object):
 
         return d[low].value if 0 <= low < len(d) else self.undef;
 
+    def __eq__(self, other):
+        return self.definition == other.definition;
+    
     def __repr__(self):
         return 'TransitionFunction(%s)' % str(self.definition);
 
@@ -50,12 +58,22 @@ class TransitionFunction(object):
     def compact(self):
         return TransitionFunction(self.__compact());
 
+    @classmethod
+    def from_items(cls, items):
+        return cls(TransitionPair(*p) for p in items);
+
     def __compact(self):
         seq = iter(self.definition);
-        p = next(seq);
-        for x in seq:
-            if p.value == x.value: p = x;
-            else: yield p; p = x;
+        p = n = next(seq, None);
+
+        while n is not None:
+            n = next(seq, None);
+
+            if n is None: yield p; p = n;
+            elif p.value == n.value: p = n;
+            else: yield p; p = n;
+        
+        if p is not None: yield p;
 
 def merge(transitions, xform = lambda x : x):
     import itertools, inspect;

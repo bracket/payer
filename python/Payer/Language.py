@@ -1,5 +1,5 @@
 from Matcher import Matcher, var, _, find;
-from Payer import TransitionFunction;
+from Payer.TransitionFunction import *;
 
 __all__ = [
     'null', 'epsilon', 'terminals',
@@ -46,7 +46,7 @@ def null(): return (Null,);
 def epsilon(): return (Epsilon,);
 
 def terminals(x):
-    if x: return (Terminals, TransitionFunction.indicator(x, MAX_TERMINAL));
+    if x: return (Terminals, indicator(x, MAX_TERMINAL));
     else: return (Epsilon,);
 
 def output(t, L): return (Output, t, L);
@@ -67,6 +67,11 @@ def union(add):
 
     @add((Union, var('x')), var('y'))
     def f(x, y): return (Union, _unique_tuple(x + (y,)));
+
+    @add((Terminals, var('x')), (Terminals, var('y')))
+    def f(x, y):
+        f = merge((x, y), xform = lambda p: TransitionPair(p.terminal, any(p.value))).compact();
+        return (Terminals, f);
 
     @add(var('x'), var('y'))
     def f(x, y): 
