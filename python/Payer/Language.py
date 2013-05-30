@@ -4,12 +4,16 @@ from Payer.TransitionFunction import *;
 __all__ = [
     'null', 'epsilon', 'terminals',
     'output', 'output_node', 'union', 'concat', 'repeat',
+    'optional', 'plus',
     'nullable', 'nullity',
     'derivative', 'finalize',
     'pretty_print', 'get_outputs',
+	'all_terminals', 'MAX_TERMINAL',
 ];
 
 MAX_TERMINAL = 255;
+
+all_terminals = set(range(0, MAX_TERMINAL + 1));
 
 def get_outputs(term):
     pattern = (OutputNode, var('node'), _);
@@ -262,3 +266,8 @@ def finalize(add):
 
     @add((OutputNode, var('node'), var('L')))
     def f(node, L): return output_node(node, finalize(L));
+
+
+def optional(L): return union(epsilon(), L);
+
+def plus(L): return concat(L, repeat(L));

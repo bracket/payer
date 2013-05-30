@@ -61,6 +61,9 @@ class TransitionFunction(object):
     @classmethod
     def from_items(cls, items):
         return cls(TransitionPair(*p) for p in items);
+	
+	def transform(self, xform):
+		return TransitionFunction(TransitionPair(p.token, xform(p.value)) for p in self.definition);
 
     def __compact(self):
         seq = iter(self.definition);
