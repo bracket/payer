@@ -1,5 +1,5 @@
-import unittest, Matcher;
-from Matcher import _, get_placeholders, match, find, var, regex, Matcher, MatchException;
+import unittest;
+from Matcher import  *;
 
 class TestMatcher(unittest.TestCase):
     def test_get_placeholders(self):
@@ -46,7 +46,22 @@ class TestMatcher(unittest.TestCase):
         self.assertEqual(f(2, 1, 3), 5);
         self.assertEqual(f('three'), '-three-');
         self.assertRaises(MatchException, f, 2, 2, 3)
+    
+    def test_matcher_method(self):
+        class C(object):
+            @MatcherMethod
+            def f(add):
+                @add(1)
+                def _f(self): return self;
 
+                @add(2)
+                def _f(self): return None;
+
+        c = C();
+
+        self.assertEqual(c.f(1), c);
+        self.assertEqual(c.f(2), None);
+        self.assertRaises(MatchException, c.f, 3);
             
 if __name__ == '__main__':
     unittest.main();

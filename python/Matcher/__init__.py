@@ -1,5 +1,12 @@
 import inspect, itertools, re, sys;
 
+__all__ = [
+    'match', 'find',
+    'var', 'regex', '_', 'get_placeholders',
+    'Matcher', 'MatcherMethod', 'Finder',
+    'MatchException',
+];
+
 _none = object();
 
 def _is_str(x): return isinstance(x, (str, unicode));
@@ -82,16 +89,17 @@ def find(pattern, value, depth = sys.maxint):
 class MatchException(BaseException): pass;
 
 class PatternMatcherBase(object):
-    def __init__(self, f):
+    def __init__(self, f, ignore_parameters = set()):
         self.name = f.__name__;
         self.patterns = [ ];
+        self.ignore_parameters = set(ignore_parameters);
         f(self.add);
 
     def add(self, *pattern):
         def add_(f):
             placeholders = get_placeholders(pattern);
-            args = inspect.getargspec(f)[0];
-            diff = (placeholders.viewkeys() - set(args), set(args) - placeholders.viewkeys());
+            args = set(inspect.getargspec(f)[0]) - self.ignore_parameters;
+            diff = (placeholders.viewkeys() - args, args - placeholders.viewkeys());
 
             if diff[0] or diff[1]:
                 raise MatchException('\n'.join((
@@ -114,6 +122,17 @@ class Matcher(PatternMatcherBase):
             if match(pattern, value): return f(*(p.value for p in args));
         raise MatchException("Inexhaustive pattern match in '{}': value = '{}'".format(self.name, value));
 
+class MatcherMethod(PatternMatcherBase):
+    def __init__(self, f):
+        super(MatcherMethod, self).__init__(f, ignore_parameters = set(['self']));
+    
+    def __get__(self, instance, t):
+        def bind(*value):
+            for pattern, args, f in self.patterns:
+                if match(pattern, value): return f(instance, *(p.value for p in args));
+            raise MatchException("Inexhaustive pattern match in '{}': value = '{}'".format(self.name, value));
+        return bind;
+    
 class Finder(PatternMatcherBase):
     def __init__(self, f):
         super(Finder, self).__init__(f);
