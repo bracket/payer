@@ -98,7 +98,7 @@ class PatternMatcherBase(object):
     def add(self, *pattern):
         def add_(f):
             placeholders = get_placeholders(pattern);
-            args = set(inspect.getargspec(f)[0]) - self.ignore_parameters;
+            args = [ arg for arg in inspect.getargspec(f)[0] if arg not in self.ignore_parameters ];
             diff = (placeholders.viewkeys() - args, args - placeholders.viewkeys());
 
             if diff[0] or diff[1]:

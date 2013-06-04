@@ -12,11 +12,12 @@ def make_word_recognizer(word):
 def main():
     hello, world = map(make_word_recognizer, ('Hello', 'World'));
     L = union(output(1, hello), output(2, world));
+    space = LanguageSpace();
 
     string = raw_input('>>> ');
-    for x in string: L = derivative(ord(x), L);
+    for x in string: L = space.derivative(ord(x), L);
 
-    outputs = list(get_outputs(finalize(L)));
+    outputs = list(get_outputs(space.finalize(L)));
     if outputs: print '\n'.join(str(out.value) for out in outputs);
     else: print 'Unrecognized input';
 

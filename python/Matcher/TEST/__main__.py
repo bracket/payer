@@ -51,16 +51,16 @@ class TestMatcher(unittest.TestCase):
         class C(object):
             @MatcherMethod
             def f(add):
-                @add(1)
-                def _f(self): return self;
+                @add(1, var('x'), var('y'))
+                def _f(self, x, y): return (self, x, y);
 
-                @add(2)
-                def _f(self): return None;
+                @add(2, var('x'), var('y'))
+                def _f(self, x , y): return None;
 
         c = C();
 
-        self.assertEqual(c.f(1), c);
-        self.assertEqual(c.f(2), None);
+        self.assertEqual(c.f(1, 'x', 'y'), (c, 'x', 'y'));
+        self.assertEqual(c.f(2, 1, 2), None);
         self.assertRaises(MatchException, c.f, 3);
             
 if __name__ == '__main__':

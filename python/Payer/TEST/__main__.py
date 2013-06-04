@@ -26,7 +26,7 @@ class TestTransitionFunction(unittest.TestCase):
 
         self.assertEqual(f.compact(), g);
 
-class TestPayer(unittest.TestCase):
+class TestLanguage(unittest.TestCase):
     def test_language_operators(self):
         x, y, z = (terminals([ord(t)]) for t in 'xyz');
 
@@ -65,6 +65,7 @@ class TestPayer(unittest.TestCase):
     def test_derivative(self):
         x, y, z = (terminals([ord(t)]) for t in 'xyz');
         xy = concat(x, y);
+        space = LanguageSpace();
 
         tests = [
             (null(),       'x', [ null() ]),
@@ -82,11 +83,12 @@ class TestPayer(unittest.TestCase):
 
         for value, tokens, expecteds in tests:
             for token, expected in zip(tokens, expecteds):
-                value = derivative(ord(token), value);
+                value = space.derivative(ord(token), value);
                 self.assertEqual(value, expected);
 
     def test_finalize(self):
         x, y, z = (terminals([ord(t)]) for t in 'xyz');
+        space = LanguageSpace();
 
         tests = [
             (null(), null()),
@@ -99,13 +101,13 @@ class TestPayer(unittest.TestCase):
         ];
 
         for value, expected in tests:
-            self.assertEqual(finalize(value), expected);
+            self.assertEqual(space.finalize(value), expected);
 
     def test_output(self):
         x,y,z = (terminals((ord(t),)) for t in 'xyz');
+        space = LanguageSpace();
         L = reduce(concat, [ output(3, x), output(1, y), union(output(5, y), output(4, z)) ]);
-        for c in 'xyz':
-            L = derivative(ord(c), L);
+        for c in 'xyz': L = space.derivative(ord(c), L);
 
         out = tuple(reversed(list(next(get_outputs(L)))));
         self.assertEqual(out, (3, 1, 4));

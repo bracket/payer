@@ -1,14 +1,14 @@
-from Matcher import Matcher, var, _, find;
+from Matcher import *;
 from Payer.TransitionFunction import *;
 
 __all__ = [
     'null', 'epsilon', 'terminals',
-    'output', 'output_node', 'union', 'concat', 'repeat',
+    'output', 'union', 'concat', 'repeat',
     'optional', 'plus',
     'nullable', 'nullity',
-    'derivative', 'finalize',
+    'LanguageSpace',
     'pretty_print', 'get_outputs',
-	'all_terminals', 'MAX_TERMINAL',
+    'all_terminals', 'MAX_TERMINAL',
 ];
 
 MAX_TERMINAL = 255;
@@ -56,6 +56,19 @@ def terminals(x):
 def output(t, L): return (Output, t, L);
 
 @Matcher
+def output_node(add):
+    @add(_, (Null,))
+    def f(): return null();
+
+    @add(var('prev_node'), (OutputNode, var('next_node'), var('L')))
+    def f(prev_node, next_node, L):
+        next_node.prev = prev_node;
+        return (OutputNode, next_node, L);
+
+    @add(var('node'), var('L'))
+    def f(node, L): return (OutputNode, node, L);
+
+@Matcher
 def union(add):
     @add((Null,), var('x'))
     def f(x): return x;
@@ -78,7 +91,7 @@ def union(add):
         return (Terminals, f);
 
     @add(var('x'), var('y'))
-    def f(x, y): 
+    def f(x, y):
         if x < y: return (Union, (x, y));
         elif y < x: return (Union, (y, x));
         else: return x;
@@ -109,7 +122,7 @@ def concat(add):
 
     @add((Concat, var('x')), var('y'))
     def f(x, y): return (Concat, x + (y,));
-    
+
     @add(var('x'), var('y'))
     def f(x, y): return (Concat, (x, y));
 
@@ -120,21 +133,8 @@ def repeat(add):
 
     @add(var('L'))
     def f(L): return (Repeat, L);
-    
+
 def ref(name): return (Ref, name);
-
-@Matcher
-def output_node(add):
-    @add(_, (Null,))
-    def f(): return null();
-
-    @add(var('prev_node'), (OutputNode, var('next_node'), var('L')))
-    def f(prev_node, next_node, L):
-        next_node.prev = prev_node;
-        return (OutputNode, next_node, L);
-
-    @add(var('node'), var('L'))
-    def f(node, L): return (OutputNode, node, L);
 
 @Matcher
 def _pretty_print(add):
@@ -146,13 +146,13 @@ def _pretty_print(add):
         print '%sUnion' % indent;
         indent += '    ';
         for t in x: _pretty_print(indent, t);
-    
+
     @add(var('indent'), (Concat, var('x')))
     def f(indent, x):
         print '%sConcat' % indent;
         indent += '    ';
         for t in x: _pretty_print(indent, t);
-    
+
     @add(var('indent'), var('x'))
     def f(indent, x):
         if isinstance(x, tuple):
@@ -190,6 +190,10 @@ def nullable(add):
 
 def nullity(L): return epsilon() if nullable(L) else null();
 
+def optional(L): return union(epsilon(), L);
+
+def plus(L): return concat(L, repeat(L));
+
 def _sublists(l):
     n = len(l);
     for i in xrange(n):
@@ -202,72 +206,78 @@ def _subconcats(l):
         elif n == 1: yield h, t[0];
         else: yield h, epsilon();
 
-@Matcher
-def derivative(add):
-    @add(_, (Null,))
-    def f(): return null();
+def _default_output_derivative(space, terminal, output, language):
+    return output_node(OutputNode(output), space.derivative(terminal, language));
 
-    @add(_, (Epsilon,))
-    def f(): return null();
+def _default_output_finalize(space, output, language):
+    return output_node(OutputNode(output), space.finalize(language));
 
-    @add(var('c'), (Terminals, var('f')))
-    def f(c, f):
-        if f(c): return epsilon();
-        else: return null();
+class LanguageSpace(object):
+    def __init__(self, handle_derivative = None, handle_finalize = None):
+        self._handle_derivative = handle_derivative if handle_derivative else _default_output_derivative;
+        self._handle_finalize = handle_finalize if handle_finalize else _default_output_finalize;
 
-    @add(var('c'), (Union, var('x')))
-    def f(c, x):
-        return (reduce(union, (derivative(c, t) for t in x)));
+    @MatcherMethod
+    def derivative(add):
+        @add(_, (Null,))
+        def f(self): return null();
 
-    @add(var('c'), (Concat, var('x')))
-    def f(c, x):
-        L = null();
-        for h, t in _subconcats(x):
-            L = union(L, concat(derivative(c, h), t))
-            if not nullable(h): break;
-        return L;
-    
-    @add(var('c'), (Repeat, var('x')))
-    def f(c, x): return concat(derivative(c, x), repeat(x));
+        @add(_, (Epsilon,))
+        def f(self): return null();
 
-    @add(var('c'), (Output, var('t'), var('L')))
-    def f(c, t, L): return output_node(OutputNode(t), derivative(c, L));
+        @add(var('c'), (Terminals, var('f')))
+        def f(self, c, f):
+            if f(c): return epsilon();
+            else: return null();
 
-    @add(var('c'), (OutputNode, var('node'), var('L')))
-    def f(c, node, L): return output_node(node, derivative(c, L));
+        @add(var('c'), (Union, var('x')))
+        def f(self, c, x):
+            return (reduce(union, (self.derivative(c, t) for t in x)));
 
-@Matcher
-def finalize(add):
-    @add((Null,))
-    def f(): return null();
+        @add(var('c'), (Concat, var('x')))
+        def f(self, c, x):
+            L = null();
+            for h, t in _subconcats(x):
+                L = union(L, concat(self.derivative(c, h), t))
+                if not nullable(h): break;
+            return L;
 
-    @add((Epsilon,))
-    def f(): return epsilon();
+        @add(var('c'), (Repeat, var('x')))
+        def f(self, c, x): return concat(self.derivative(c, x), repeat(x));
 
-    @add((Terminals, _))
-    def f(): return null();
+        @add(var('c'), (Output, var('t'), var('L')))
+        def f(self, c, t, L): return self._handle_derivative(self, c, t, L);
 
-    @add((Union, var('Ls')))
-    def f(Ls): return reduce(union, (finalize(L) for L in Ls));
+        @add(var('c'), (OutputNode, var('node'), var('L')))
+        def f(self, c, node, L): return output_node(node, self.derivative(c, L));
 
-    @add((Concat, var('Ls')))
-    def f(Ls): 
-        out = null();
-        for L in Ls:
-            if not nullable(L): break;
-            out = union(out, finalize(L));
-        return out;
-    
-    @add((Repeat, var('L')))
-    def f(L): return union(epsilon(), finalize(L));
+    @MatcherMethod
+    def finalize(add):
+        @add((Null,))
+        def f(self): return null();
 
-    @add((Output, var('t'), var('L')))
-    def f(t, L): return output_node(OutputNode(t), finalize(L));
+        @add((Epsilon,))
+        def f(self): return epsilon();
 
-    @add((OutputNode, var('node'), var('L')))
-    def f(node, L): return output_node(node, finalize(L));
+        @add((Terminals, _))
+        def f(self): return null();
 
+        @add((Union, var('Ls')))
+        def f(self, Ls): return reduce(union, (self.finalize(L) for L in Ls));
 
-def optional(L): return union(epsilon(), L);
+        @add((Concat, var('Ls')))
+        def f(self, Ls):
+            out = null();
+            for L in Ls:
+                if not nullable(L): break;
+                out = union(out, self.finalize(L));
+            return out;
 
-def plus(L): return concat(L, repeat(L));
+        @add((Repeat, var('L')))
+        def f(self, L): return union(epsilon(), self.finalize(L));
+
+        @add((Output, var('t'), var('L')))
+        def f(self, t, L): return self._handle_finalize(self, OutputNode(t), self.finalize(L));
+
+        @add((OutputNode, var('node'), var('L')))
+        def f(self, node, L): return output_node(node, self.finalize(L));

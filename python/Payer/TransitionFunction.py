@@ -48,7 +48,7 @@ class TransitionFunction(object):
 
     def __eq__(self, other):
         return self.definition == other.definition;
-    
+
     def __repr__(self):
         return 'TransitionFunction(%s)' % str(self.definition);
 
@@ -61,9 +61,9 @@ class TransitionFunction(object):
     @classmethod
     def from_items(cls, items):
         return cls(TransitionPair(*p) for p in items);
-	
-	def transform(self, xform):
-		return TransitionFunction(TransitionPair(p.token, xform(p.value)) for p in self.definition);
+
+    def transform(self, xform):
+        return TransitionFunction(TransitionPair(p.token, xform(p.value)) for p in self.definition);
 
     def __compact(self):
         seq = iter(self.definition);
@@ -75,7 +75,7 @@ class TransitionFunction(object):
             if n is None: yield p; p = n;
             elif p.value == n.value: p = n;
             else: yield p; p = n;
-        
+
         if p is not None: yield p;
 
 def merge(transitions, xform = lambda x : x):
@@ -84,7 +84,7 @@ def merge(transitions, xform = lambda x : x):
 
     if inspect.isgenerator(transitions): transitions = list(transitions);
     terminals = sorted(set(ichain((p.terminal for p in f.definition) for f in transitions)));
-    
+
     return TransitionFunction(
         xform(p) for p in (
             TransitionPair(t, tuple(f(t) for f in transitions))
