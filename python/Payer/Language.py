@@ -5,6 +5,7 @@ __all__ = [
     'null', 'epsilon', 'terminals',
     'output', 'output_node', 'union', 'concat', 'repeat',
     'optional', 'plus',
+    'ref',
     'nullable', 'nullity',
     'OutputNode', 'LanguageSpace',
     'pretty_print', 'get_outputs',
@@ -161,29 +162,37 @@ def pretty_print(term, indent = ''):
     _pretty_print(indent, term);
 
 @Matcher
-def nullable(add):
+def nullity(add):
+    @add((Null,))
+    def _nullity(): return null();
+
     @add((Epsilon,))
-    def _nullable(): return True;
+    def _nullity(): return epsilon();
+
+    @add((Terminals, _))
+    def _nullity(): return null();
+
+    @add((Union, var('Ls')))
+    def _nullity(Ls):
+        return reduce(union, (nullity(L) for L in  Ls));
+
+    @add((Concat, var('Ls')))
+    def _nullity(Ls):
+        return reduce(concat, (nullity(L) for L in Ls));
 
     @add((Repeat, _))
-    def _nullable(): return True;
+    def _nullity(): return epsilon();
+
+    @add((Ref, var('name')))
+    def _nullity(name): return ref(name);
 
     @add((Output, _, var('L')))
-    def _nullable(L): return nullable(L);
-
-    @add((Union, var('xs')))
-    def _nullable(xs): return any(nullable(x) for x in xs);
-
-    @add((Concat, var('xs')))
-    def _nullable(xs): return all(nullable(x) for x in xs);
+    def _nullity(L): return nullity(L);
 
     @add((OutputNode, _, var('L')))
-    def _nullable(L): return nullable(L);
+    def _nullity(L): return nullity(L);
 
-    @add(_)
-    def _nullable(): return False;
-
-def nullity(L): return epsilon() if nullable(L) else null();
+def nullable(L): return nullity(L) == epsilon();
 
 def optional(L): return union(epsilon(), L);
 
@@ -215,6 +224,25 @@ class LanguageSpace(object):
     def __init__(self, handle_derivative = None, handle_finalize = None):
         self._handle_derivative = handle_derivative if handle_derivative else _default_output_derivative;
         self._handle_finalize = handle_finalize if handle_finalize else _default_output_finalize;
+
+        self._languages = { };
+        self._nullity_cache = None;
+    
+    @MatcherMethod
+    def __getitem__(add):
+        @add((Ref, var('key')))
+        def _getitem(self, key): return self._languages[(Ref, key)];
+
+        @add(var('key'))
+        def _getitem(self, key): return self._languages[(Ref, key)];
+
+    @MatcherMethod
+    def __setitem__(add):
+        @add((Ref, var('key')), var('value'))
+        def _setitem(self, key, value): self._languages[(Ref, key)] = value;
+
+        @add(var('key'), var('value'))
+        def _setitem(self, key, value): self._languages[(Ref, key)] = value;
 
     @MatcherMethod
     def derivative(add):
@@ -280,3 +308,26 @@ class LanguageSpace(object):
 
         @add((OutputNode, var('node'), var('L')))
         def _finalize(self, node, L): return output_node(node, self.finalize(L));
+
+    @MatcherMethod
+    def expand_nullity_ref(add):
+        @add((Ref, var('name')))
+        def _expand_nullity_ref(self, name): return self._nullity_cache[(Ref, name)];
+
+        @add(var('L'))
+        def _expand_nullity_ref(self, L): return L;
+
+    def generate_nullity_cache(self):
+        done = (null(), epsilon());
+        self._nullity_cache = { k : nullity(L) for k, L in self._languages.iteritems() };
+        changed = True;
+
+        while changed:
+            changed = False;
+            for k, L in self._nullity_cache.iteritems():
+                if L in done: continue;
+                M = self._nullity_cache[k] = bottom_up(self.expand_nullity_ref, L);
+                changed = changed or (M != L);
+
+        for k, L in self._nullity_cache.iteritems():
+            if L not in done: self._nullity_cache[k] = null();

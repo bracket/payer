@@ -5,6 +5,7 @@ __all__ = [
     'var', 'regex', '_', 'get_placeholders',
     'Matcher', 'MatcherMethod', 'Finder',
     'MatchException',
+    'top_down', 'bottom_up',
 ];
 
 _none = object();
@@ -85,6 +86,23 @@ def find(pattern, value, depth = sys.maxint):
         if match(pattern, value): yield value, { k : v.value for k,v in placeholders };
         if _is_mapping(value): remaining.extend((v, depth - 1) for k, v in _iteritems(value));
         if _is_sequence(value): remaining.extend((v, depth - 1) for v in value);
+
+def _nest(f, term):
+    result = f(term);
+    while result is not term: term, result = result, f(term);
+    return result;
+
+def top_down(f, term):
+    term = _nest(f, term);
+
+    if _is_sequence(term): return type(term)(top_down(f, t) for t in term);
+    elif _is_mapping(term): type(term)((k, top_down(f, t)) for k, t in _iteritems(term));
+    else: return term;
+
+def bottom_up(f, term):
+    if _is_sequence(term): term = type(term)(bottom_up(f, t) for t in term);
+    elif _is_mapping(term): term = type(term)((k, bottom_up(f, t)) for k, t in _iteritems(term));
+    return _nest(f, term);
 
 class MatchException(BaseException): pass;
 

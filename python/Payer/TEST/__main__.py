@@ -111,6 +111,29 @@ class TestLanguage(unittest.TestCase):
 
         out = tuple(reversed(list(next(get_outputs(L)))));
         self.assertEqual(out, (3, 1, 4));
-        
+
+class TestLanguageSpace(unittest.TestCase):
+    def test_get_set(self):
+        ls = LanguageSpace();
+        ws = terminals([ord(' ')]);
+
+        ls['ws'] = ws;
+
+        expected = { ref('ws') : ws };
+        self.assertEquals(expected, ls._languages);
+
+    def test_nullity_cache(self):
+        ls = LanguageSpace();
+        x = terminals([ord('x')]);
+
+        ls['L'] = union(concat(ref('L'), x), ref('L'));
+
+        ls['R'] = union(concat(x, ref('R')), epsilon());
+
+        ls['X'] = reduce(concat, (ref('Y'), x, ref('Y')));
+        ls['Y'] = union(ref('X'), epsilon());
+
+        ls.generate_nullity_cache();
+
 if __name__ == '__main__':
     unittest.main();

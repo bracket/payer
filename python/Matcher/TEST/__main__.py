@@ -62,6 +62,37 @@ class TestMatcher(unittest.TestCase):
         self.assertEqual(c.f(1, 'x', 'y'), (c, 'x', 'y'));
         self.assertEqual(c.f(2, 1, 2), None);
         self.assertRaises(MatchException, c.f, 3);
-            
+    
+    def test_top_down(self):
+        term = [ 'x', [ 1, 2 ], [ 2, 3 ] ];
+
+        @Matcher
+        def f(add):
+            @add(('x', var('x'), var('y')))
+            def _f(x, y): return x + y;
+
+            @add((var('x')))
+            def _f(x):
+                if isinstance(x, list): return sum(x);
+                else: return x;
+        
+        self.assertEqual(top_down(f, term), 8);
+
+    def test_bottom_up(self):
+        term = [ 'x', [ 'x', 1, 2 ], [ 'y', 3, 4] ];
+
+        @Matcher
+        def f(add):
+            @add(('x', var('x'), var('y')))
+            def _f(x, y): return x * y;
+
+            @add(('y', var('x'), var('y')))
+            def _f(x, y): return x - y;
+
+            @add(var('x'))
+            def _f(x): return x;
+
+        self.assertEqual(bottom_up(f, term), -2);
+
 if __name__ == '__main__':
     unittest.main();
