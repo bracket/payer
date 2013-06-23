@@ -2,7 +2,8 @@ import inspect, itertools, re, sys;
 
 __all__ = [
     'match', 'find',
-    'var', 'regex', '_', 'get_placeholders',
+    'var', 'regex', 'passvar',
+    '_', 'get_placeholders',
     'Matcher', 'MatcherMethod', 'Finder',
     'MatchException',
     'top_down', 'bottom_up',
@@ -29,6 +30,17 @@ class Placeholder(PlaceholderBase):
         self.value = value;
         return True;
 
+class PassThroughPlaceholder(PlaceholderBase):
+    def __init__(self, name, pattern):
+        super(PassThroughPlaceholder, self).__init__(name);
+        self.pattern = pattern;
+        self.children = get_placeholders(pattern);
+
+    def match(self, value):
+        if not match(self.pattern, value): return False;
+        self.value = (value, { n : p.value for n, p in self.children.iteritems() });
+        return True;
+
 class RegEx(PlaceholderBase):
     _re_type = type(re.compile(''));
 
@@ -46,6 +58,7 @@ class RegEx(PlaceholderBase):
         return m is not None;
 
 def var(name): return Placeholder(name);
+def passvar(name, pattern): return PassThroughPlaceholder(name, pattern);
 def regex(name, regex): return RegEx(name, regex);
 
 _ = var('');

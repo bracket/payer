@@ -29,6 +29,15 @@ class TestMatcher(unittest.TestCase):
         self.assertEqual(('xxy', 'baaaaaab'), tuple(t.value.group() for t in (x, y)));
         self.assertFalse(match(pattern, ('xzy', ('weasel', 'baab'))));
 
+    def test_pass_through_match(self):
+        x = passvar('x', ('y', (var('x'))));
+        value = ('y', 1);
+
+        self.assertTrue(match(x, value));
+        self.assertIs(x.value[0], value);
+        self.assertEqual(x.value[1], {'x' : 1});
+        self.assertFalse(match(x, ('z', 2)));
+
     def test_find(self):
         pattern = (var('x'), 1, var('y'));
         f = list(find(pattern, ('a', { 'b' : ('x', 1, 'y') })));
