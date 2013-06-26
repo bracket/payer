@@ -133,7 +133,7 @@ class TestLanguageSpace(unittest.TestCase):
         ls['X'] = reduce(concat, (ref('Y'), x, ref('Y')));
         ls['Y'] = union(ref('X'), epsilon());
 
-        ls.generate_nullity_cache();
+        ls.update_nullity_cache();
 
 if __name__ == '__main__':
     unittest.main();

@@ -102,14 +102,14 @@ def find(pattern, value, depth = sys.maxint):
 
 def _nest(f, term):
     result = f(term);
-    while result is not term: term, result = result, f(term);
+    while term is not result: term, result = result, f(result);
     return result;
 
 def top_down(f, term):
     term = _nest(f, term);
 
     if _is_sequence(term): return type(term)(top_down(f, t) for t in term);
-    elif _is_mapping(term): type(term)((k, top_down(f, t)) for k, t in _iteritems(term));
+    elif _is_mapping(term): return type(term)((k, top_down(f, t)) for k, t in _iteritems(term));
     else: return term;
 
 def bottom_up(f, term):
