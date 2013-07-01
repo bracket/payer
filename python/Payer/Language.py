@@ -365,3 +365,6 @@ class LanguageSpace(object):
 
         @add(var('L'))
         def _nullity(self, L): return nullity(L);
+
+    def nullable(self, L):
+        return self.nullity(L) == epsilon();
