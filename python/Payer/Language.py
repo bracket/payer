@@ -311,7 +311,7 @@ class LanguageSpace(object):
         def _derivative(self, c, node, L): return output_node(node, self.derivative(c, L));
 
         @add(var('c'), (Ref, var('name')))
-        def _derivative(self, c, name): return self.derivative(c, self._languages[name]);
+        def _derivative(self, c, name): return self.derivative(c, self._languages[(Ref, name)]);
 
     @MatcherMethod
     def finalize(add):
@@ -351,7 +351,7 @@ class LanguageSpace(object):
         def _finalize(self, node, L): return output_node(node, self.finalize(L));
 
         @add((Ref, var('name')))
-        def _finalize(self, name): return self.finalize(self._languages[name]);
+        def _finalize(self, name): return self.finalize(self._languages[(Ref, name)]);
 
     @MatcherMethod
     def expand_nullity_ref(add):
