@@ -47,7 +47,7 @@ class TransitionFunction(object):
         return d[low].value if 0 <= low < len(d) else self.undef;
 
     def __eq__(self, other):
-        return self.definition == other.definition;
+        return type(other) == TransitionFunction and self.definition == other.definition;
 
     def __repr__(self):
         return 'TransitionFunction(%s)' % str(self.definition);
