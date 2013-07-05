@@ -61,3 +61,10 @@ def _make_quoted_string_def(quote_terminals):
 
 languages['single_quoted_string'] = _make_quoted_string_def("'");
 languages['double_quoted_string'] = _make_quoted_string_def('"');
+
+languages['lbrace'] = terminals([ ord('{') ]);
+languages['rbrace'] = terminals([ ord('}') ]);
+languages['lbracket'] = terminals([ ord('[') ]);
+languages['rbracket'] = terminals([ ord(']') ]);
+languages['langle'] = terminals([ ord('<') ]);
+languages['rangle'] = terminals([ ord('>') ])
