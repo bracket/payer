@@ -345,7 +345,7 @@ class LanguageSpace(object):
         def _finalize(self, L): return union(epsilon(), self.finalize(L));
 
         @add((Output, var('t'), var('L')))
-        def _finalize(self, t, L): return self._handle_finalize(self, OutputNode(t), self.finalize(L));
+        def _finalize(self, t, L): return self._handle_finalize(self, t, self.finalize(L));
 
         @add((OutputNode, var('node'), var('L')))
         def _finalize(self, node, L): return output_node(node, self.finalize(L));
