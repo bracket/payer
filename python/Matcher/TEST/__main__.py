@@ -35,7 +35,9 @@ class TestMatcher(unittest.TestCase):
 
         self.assertTrue(match(x, value));
         self.assertIs(x.value[0], value);
+        self.assertIs(x.value.parent, value);
         self.assertEqual(x.value[1], {'x' : 1});
+        self.assertEqual(x.value.children, {'x' : 1});
         self.assertFalse(match(x, ('z', 2)));
 
     def test_find(self):

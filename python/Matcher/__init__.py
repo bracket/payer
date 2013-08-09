@@ -1,4 +1,5 @@
 import inspect, itertools, re, sys;
+from collections import namedtuple;
 
 __all__ = [
     'match', 'find',
@@ -30,6 +31,8 @@ class Placeholder(PlaceholderBase):
         self.value = value;
         return True;
 
+PassthroughTuple = namedtuple('PassthroughTuple', [ 'parent', 'children' ]);
+
 class PassThroughPlaceholder(PlaceholderBase):
     def __init__(self, name, pattern):
         super(PassThroughPlaceholder, self).__init__(name);
@@ -38,7 +41,7 @@ class PassThroughPlaceholder(PlaceholderBase):
 
     def match(self, value):
         if not match(self.pattern, value): return False;
-        self.value = (value, { n : p.value for n, p in self.children.iteritems() });
+        self.value = PassthroughTuple(value, { n : p.value for n, p in self.children.iteritems() });
         return True;
 
 class RegEx(PlaceholderBase):
