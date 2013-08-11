@@ -2,6 +2,8 @@ import unittest;
 
 from Payer.TransitionFunction import *;
 from Payer.Language import *;
+from Matcher import _;
+import Matcher.TEST;
 
 class TestTransitionFunction(unittest.TestCase):
     def test_transition_function(self):
@@ -27,6 +29,8 @@ class TestTransitionFunction(unittest.TestCase):
         self.assertEqual(f.compact(), g);
 
 class TestLanguage(unittest.TestCase):
+    assertMatches = Matcher.TEST.assertMatches;
+
     def test_language_operators(self):
         x, y, z = (terminals([ord(t)]) for t in 'xyz');
 
@@ -62,6 +66,18 @@ class TestLanguage(unittest.TestCase):
         for value, expected in tests:
             self.assertEqual(nullable(value), expected);
 
+    def test_split_concat(self):
+        x, y, z = (terminals([ord(t)]) for t in 'xyz');
+
+        tests = [
+            (x, (x, epsilon())),
+            (concat(x, y), (x, y)),
+            (reduce(concat, (x, y, z)), (x, concat(y, z))),
+        ];
+
+        for value, expected in tests:
+            self.assertEqual(split_concat(value), expected);
+
     def test_derivative(self):
         x, y, z = (terminals([ord(t)]) for t in 'xyz');
         xy = concat(x, y);
@@ -85,6 +101,18 @@ class TestLanguage(unittest.TestCase):
             for token, expected in zip(tokens, expecteds):
                 value = space.derivative(ord(token), value);
                 self.assertEqual(value, expected);
+
+    def test_derivative_concat(self):
+        x, y, z = (terminals([ ord(t) ]) for t in 'xyz');
+        ls = LanguageSpace();
+
+        L = reduce(concat, (x, output('z', div()), y, z));
+
+        L = ls.derivative(ord('x'), L);
+        self.assertMatches(L, output('z', reduce(concat, (div(), y, z))));
+
+        L = ls.derivative(ord('y'), L);
+        self.assertMatches(output_node(_, z), L);
 
     def test_finalize(self):
         x, y, z = (terminals([ord(t)]) for t in 'xyz');

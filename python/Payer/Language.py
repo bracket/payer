@@ -2,11 +2,11 @@ from Matcher import *;
 from Payer.TransitionFunction import *;
 
 __all__ = [
-    'null', 'epsilon', 'terminals',
+    'null', 'epsilon', 'div', 'terminals',
     'output', 'output_node', 'union', 'concat', 'repeat',
     'optional', 'plus',
     'ref',
-    'nullable', 'nullity',
+    'nullable', 'nullity', 'split_concat',
     'OutputNode', 'LanguageSpace',
     'pretty_print', 'get_outputs',
     'all_terminals', 'MAX_TERMINAL',
@@ -49,7 +49,9 @@ def null(): return (Null,);
 
 def epsilon(): return (Epsilon,);
 
-_NE = (null(), epsilon());
+def div(): return (Div, );
+
+_NED = (null(), epsilon(), div());
 
 def terminals(x):
     if x: return (Terminals, indicator(x, MAX_TERMINAL));
@@ -118,14 +120,30 @@ def concat(add):
     @add((OutputNode, var('node'), var('x')), var('y'))
     def _concat(node, x, y): return output_node(node, concat(x, y));
 
+    @add((Output, var('s'), var('L')), var('R'))
+    def _concat(s, L, R): return output(s, concat(L, R));
+
     @add(var('x'), (Concat, var('y')))
     def _concat(x, y): return (Concat, (x,) + y);
 
     @add((Concat, var('x')), var('y'))
     def _concat(x, y): return (Concat, x + (y,));
 
+
     @add(var('x'), var('y'))
     def _concat(x, y): return (Concat, (x, y));
+
+@Matcher
+def split_concat(add):
+    @add((Concat, var('Ls')))
+    def _split_concat(Ls):
+        length = len(Ls);
+        if length == 2: return (Ls[0], Ls[1])
+        elif length == 3: return (Ls[0], concat(Ls[1], Ls[2]));
+        else: return (Ls[0], concat(Ls[1], (Concat, Ls[2:])));
+
+    @add(var('L'))
+    def _split_concat(L): return (L, epsilon());
 
 @Matcher
 def repeat(add):
@@ -174,12 +192,15 @@ def nullity(add):
     @add((Epsilon,))
     def _nullity(): return epsilon();
 
+    @add((Div,))
+    def _nullity(): return epsilon();
+
     @add((Terminals, _))
     def _nullity(): return null();
 
     @add((Union, var('Ls')))
     def _nullity(Ls):
-        out, e = _NE;
+        out, e, d = _NED;
         for L in Ls:
             n = nullity(L);
             if n == e: return e;
@@ -211,18 +232,6 @@ def plus(L): return concat(L, repeat(L));
 def get_outputs(term):
     pattern = (OutputNode, var('node'), _);
     for m, d in find(pattern, term): yield d['node'];
-
-def _sublists(l):
-    n = len(l);
-    for i in xrange(n):
-        yield l[i], l[i+1:n];
-
-def _subconcats(l):
-    for h, t in _sublists(l):
-        n = len(t);
-        if n > 1: yield h, (Concat, t);
-        elif n == 1: yield h, t[0];
-        else: yield h, epsilon();
 
 def _default_output_derivative(space, terminal, output, language):
     return output_node(OutputNode(output), space.derivative(terminal, language));
@@ -269,6 +278,9 @@ class LanguageSpace(object):
         @add(_, (Epsilon,))
         def _derivative(self): return null();
 
+        @add(_, (Div,))
+        def _derivative(self): return null();
+
         @add(var('c'), (Terminals, var('f')))
         def _derivative(self, c, f):
             if f(c): return epsilon();
@@ -280,11 +292,14 @@ class LanguageSpace(object):
 
         @add(var('c'), (Concat, var('x')))
         def _derivative(self, c, x):
-            L = null();
-            for h, t in _subconcats(x):
-                L = union(L, concat(self.derivative(c, h), t))
-                if not nullable(h): break;
-            return L;
+            head, tail = split_concat((Concat, x));
+            out = concat(self.derivative(c, head), tail);
+
+            while self.nullable(head):
+                head, tail = split_concat(tail);
+                out = union(out, concat(self.derivative(c, head), tail));
+
+            return out;
 
         @add(var('c'), (Repeat, var('x')))
         def _derivative(self, c, x): return concat(self.derivative(c, x), repeat(x));
@@ -306,6 +321,9 @@ class LanguageSpace(object):
         @add((Epsilon,))
         def _finalize(self): return epsilon();
 
+        @add((Div,))
+        def _finalize(self): return epsilon();
+
         @add((Terminals, _))
         def _finalize(self): return null();
 
@@ -314,10 +332,13 @@ class LanguageSpace(object):
 
         @add((Concat, var('Ls')))
         def _finalize(self, Ls):
-            out = null();
-            for L in Ls:
-                if not nullable(L): break;
-                out = union(out, self.finalize(L));
+            head, tail = split_concat((Concat, Ls));
+            out = concat(self.finalize(head), tail);
+
+            while self.nullable(head):
+                head, tail = split_concat(tail);
+                out = union(out, concat(self.finalize(head), tail));
+
             return out;
 
         @add((Repeat, var('L')))
@@ -337,14 +358,14 @@ class LanguageSpace(object):
         @add(passvar('ref', (Ref, _)))
         def _expand_nullity_ref(self, ref):
             out = self._nullity_cache[ref[0]];
-            if out in _NE: return out;
+            if out in _NED: return out;
             else: return ref[0];
 
         @add(var('L'))
         def _expand_nullity_ref(self, L): return L;
 
     def update_nullity_cache(self):
-        done = _NE;
+        done = _NED;
         changed = True;
 
         while changed:
