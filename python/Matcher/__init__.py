@@ -1,11 +1,14 @@
+r'''Provides basic pattern matching against Python tuples, lists, and dictionaries.'''
+
 import inspect, itertools, re, sys;
 from collections import namedtuple;
 
 __all__ = [
     'match', 'find',
-    'var', 'regex', 'passvar',
+    'var', 'passvar', 'typedvar', 'regexvar', 
     '_', 'get_placeholders',
-    'Matcher', 'MatcherMethod', 'Finder',
+    'Matcher', 'MatcherMethod',
+    'Finder', 'FinderMethod',
     'MatchException',
     'top_down', 'bottom_up',
 ];
@@ -13,7 +16,7 @@ __all__ = [
 _none = object();
 
 def _is_str(x): return isinstance(x, (str, unicode));
-def _is_sequence(x): return isinstance(x, (tuple, list));
+def _is_sequence(x): return isinstance(x, (tuple, list, set, frozenset));
 def _is_mapping(x): return isinstance(x, dict);
 
 def _iteritems(x): return x.iteritems();
@@ -31,6 +34,10 @@ class Placeholder(PlaceholderBase):
         self.value = value;
         return True;
 
+    def __repr__(self):
+        if not self.name: return '_';
+        else: return "var({})".format(self.name);
+
 PassthroughTuple = namedtuple('PassthroughTuple', [ 'parent', 'children' ]);
 
 class PassThroughPlaceholder(PlaceholderBase):
@@ -44,11 +51,23 @@ class PassThroughPlaceholder(PlaceholderBase):
         self.value = PassthroughTuple(value, { n : p.value for n, p in self.children.iteritems() });
         return True;
 
-class RegEx(PlaceholderBase):
+class TypedPlaceholder(PlaceholderBase):
+    def __init__(self, name, types):
+        super(TypePlaceholder, self).__init__(name);
+
+        if isinstance(types, (tuple, list)): self.types = tuple(types);
+        else: self.ty = (types);
+    
+    def match(self, value):
+        if not type(value) in self.types: return False;
+        self.value = value;
+        return;
+
+class RegExPlaceholder(PlaceholderBase):
     _re_type = type(re.compile(''));
 
     def __init__(self, name, regex):
-        super(RegEx, self).__init__(name);
+        super(RegExPlaceholder, self).__init__(name);
 
         if not isinstance(regex, self._re_type): regex = re.compile(regex);
 
@@ -60,9 +79,11 @@ class RegEx(PlaceholderBase):
         m = self.value = self.regex.match(value);
         return m is not None;
 
+
 def var(name): return Placeholder(name);
 def passvar(name, pattern): return PassThroughPlaceholder(name, pattern);
-def regex(name, regex): return RegEx(name, regex);
+def typedvar(name, ty): return TypePlaceholder(name, ty);
+def regexvar(name, regex): return RegExPlaceholder(name, regex);
 
 _ = var('');
 
@@ -82,6 +103,15 @@ def get_placeholders(pattern, accum = None):
     return accum;
 
 def match(pattern, value):
+    r'''Attempt to unify 'pattern' with 'value'.  Returns True on success. False otherwise.
+
+    On successful completion, all placeholders in 'pattern' will have been
+    mutated so that their 'value' attribute refers to the successfully matching
+    element in the 'value'.  Note that placeholders may be mutated even if
+    pattern matching fails.  Use 'get_placeholders' to extract all placeholders
+    from 'pattern'.
+    '''
+
     if value is _none: return False;
     elif isinstance(pattern, PlaceholderBase): return pattern.match(value);
     elif _is_mapping(pattern) and _is_mapping(value):
@@ -123,42 +153,50 @@ def bottom_up(f, term):
 class MatchException(BaseException): pass;
 
 class PatternMatcherBase(object):
-    def __init__(self, f, ignore_parameters = set()):
-        self.name = f.__name__;
+    def __init__(self, name, ignore_parameters = None):
+        self.name = name;
         self.patterns = [ ];
-        self.ignore_parameters = set(ignore_parameters);
-        f(self.add);
+        self.ignore_parameters = set() if ignore_parameters is None else set(ignore_parameters);
 
-    def add(self, *pattern):
-        def add_(f):
-            placeholders = get_placeholders(pattern);
-            args = [ arg for arg in inspect.getargspec(f)[0] if arg not in self.ignore_parameters ];
-            diff = (placeholders.viewkeys() - args, args - placeholders.viewkeys());
+    @classmethod
+    def decorate(cls, f, ignore_parameters = set()):
+        out = cls(f.__name__, ignore_parameters);
+        f(out.make_add_decorator());
+        return out;
 
-            if diff[0] or diff[1]:
-                raise MatchException('\n'.join((
-                    'placeholder names differ from function argument names:',
-                    "extra placeholders = '%s'" % ', '.join(sorted(diff[0])),
-                    "extra args = '%s'" % ', '.join(sorted(diff[1])),
-                )));
+    def add(self, pattern, function):
+        placeholders = get_placeholders(pattern);
+        args = [ arg for arg in inspect.getargspec(function)[0] if arg not in self.ignore_parameters ];
+        diff = (placeholders.viewkeys() - args, args - placeholders.viewkeys());
 
-            args = tuple(placeholders[a] for a in args);
-            self.patterns.append((pattern, args, f));
+        if diff[0] or diff[1]:
+            raise MatchException('\n'.join((
+                'placeholder names differ from function argument names:',
+                "extra placeholders = '%s'" % ', '.join(sorted(diff[0])),
+                "extra args = '%s'" % ', '.join(sorted(diff[1])),
+            )));
 
-        return add_;
+        args = tuple(placeholders[a] for a in args);
+        self.patterns.append((pattern, args, function));
+
+        return function;
+
+    def make_add_decorator(self):
+        def decorator(*pattern):
+            return lambda function: self.add(pattern, function);
+        return decorator;
 
 class Matcher(PatternMatcherBase):
-    def __init__(self, f):
-        super(Matcher, self).__init__(f);
-
     def __call__(self, *value):
         for pattern, args, f in self.patterns:
             if match(pattern, value): return f(*(p.value for p in args));
         raise MatchException("Inexhaustive pattern match in '{}': value = '{}'".format(self.name, value));
 
 class MatcherMethod(PatternMatcherBase):
-    def __init__(self, f):
-        super(MatcherMethod, self).__init__(f, ignore_parameters = set(['self']));
+    def __init__(self, name, ignore_parameters = None):
+        ip = { 'self' };
+        if ignore_parameters is not None: ip.update(ignore_parameters);
+        super(MatcherMethod, self).__init__(name, ignore_parameters = ip);
     
     def __get__(self, instance, t):
         def bind(*value):
@@ -168,15 +206,31 @@ class MatcherMethod(PatternMatcherBase):
         return bind;
     
 class Finder(PatternMatcherBase):
-    def __init__(self, f):
-        super(Finder, self).__init__(f);
-
-    def __call__(self, *value):
+    def __call__(self, value):
         remaining = [ value ];
 
         while remaining:
             value = remaining.pop(0);
             for pattern, args, f in self.patterns:
-                if match(pattern, value): f(*(p.value for p in args));
+                if match(pattern, (value,)): f(*(p.value for p in args));
             if _is_mapping(value): remaining.extend(value.values());
             elif _is_sequence(value): remaining.extend(value);
+
+class FinderMethod(PatternMatcherBase):
+    def __init__(self, name, ignore_parameters = None):
+        ip = { 'self' };
+        if ignore_parameters is not None: ip.update(ignore_parameters);
+        super(FinderMethod, self).__init__(name, ignore_parameters = ip);
+    
+    def __get__(self, instance, t):
+        def bind(value):
+            remaining = [ value ];
+
+            while remaining:
+                value = remaining.pop(0);
+                for pattern, args, f in self.patterns:
+                    if match(pattern, (value,)): f(instance, *(p.value for p in args));
+                if _is_mapping(value): remaining.extend(value.values());
+                elif _is_sequence(value): remaining.extend(value);
+
+        return bind;

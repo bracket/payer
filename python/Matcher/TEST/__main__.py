@@ -23,7 +23,7 @@ class TestMatcher(unittest.TestCase):
         self.assertFalse(match(pattern, (1, 2, 3)));
 
     def test_regex_match(self):
-        x, y = regex('x', r'x*y'), regex('y', r'ba*b');
+        x, y = regexvar('x', r'x*y'), regexvar('y', r'ba*b');
         pattern = (x, ('weasel', y));
         self.assertTrue(match(pattern, ('xxy', ('weasel', 'baaaaaab'))));
         self.assertEqual(('xxy', 'baaaaaab'), tuple(t.value.group() for t in (x, y)));
@@ -46,7 +46,7 @@ class TestMatcher(unittest.TestCase):
         self.assertEqual(f, [(('x', 1, 'y'), {'x' : 'x', 'y' : 'y' })]);
 
     def test_matcher(self):
-        @Matcher
+        @Matcher.decorate
         def f(add):
             @add(var('x'), 1, var('y'))
             def _f(x, y): return x + y;
@@ -60,7 +60,7 @@ class TestMatcher(unittest.TestCase):
     
     def test_matcher_method(self):
         class C(object):
-            @MatcherMethod
+            @MatcherMethod.decorate
             def f(add):
                 @add(1, var('x'), var('y'))
                 def _f(self, x, y): return (self, x, y);
@@ -77,7 +77,7 @@ class TestMatcher(unittest.TestCase):
     def test_top_down(self):
         term = [ 'x', [ 1, 2 ], [ 2, 3 ] ];
 
-        @Matcher
+        @Matcher.decorate
         def f(add):
             @add(('x', var('x'), var('y')))
             def _f(x, y): return x + y;
@@ -92,7 +92,7 @@ class TestMatcher(unittest.TestCase):
     def test_bottom_up(self):
         term = [ 'x', [ 'x', 1, 2 ], [ 'y', 3, 4] ];
 
-        @Matcher
+        @Matcher.decorate
         def f(add):
             @add(('x', var('x'), var('y')))
             def _f(x, y): return x * y;

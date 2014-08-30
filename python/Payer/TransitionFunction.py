@@ -33,7 +33,8 @@ class TransitionFunction(object):
     undef = object();
 
     def __init__(self, definition):
-        self.definition = sorted(definition);
+        if isinstance(definition, TransitionFunction): self.definition = list(definition.definition);
+        else: self.definition = sorted(definition);
 
     def __call__(self, terminal):
         d = self.definition;
@@ -63,7 +64,7 @@ class TransitionFunction(object):
         return cls(TransitionPair(*p) for p in items);
 
     def transform(self, xform):
-        return TransitionFunction(TransitionPair(p.token, xform(p.value)) for p in self.definition);
+        return TransitionFunction(TransitionPair(p.terminal, xform(p.value)) for p in self.definition);
 
     def __compact(self):
         seq = iter(self.definition);
