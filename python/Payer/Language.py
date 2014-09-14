@@ -39,19 +39,17 @@ def terminals(x):
     if x: return Terminals(indicator(x, MAX_TERMINAL));
     else: return Epsilon();
 
-def output(t, L): return (Output, t, L);
-
 @Proto.decorate
 def union(add):
     r'''construct the term representing a union of two languages
 
-    union Null x = x;
-    union x Null = x;
-    union (Union x) (Union y) = Union(x | y);
-    union x (Union y) = Union(frozenset([x]) | y);
-    union (Union x) y = Union(x | frozenset([y]));
-    union (Terminals x) (Terminals y) = union_terminals(x, y);
-    union x y = Union(frozenset([ x, y ]));
+        union Null x = x;
+        union x Null = x;
+        union (Union x) (Union y) = Union(x | y);
+        union x (Union y) = Union(frozenset([x]) | y);
+        union (Union x) y = Union(x | frozenset([y]));
+        union (Terminals x) (Terminals y) = union_terminals(x, y);
+        union x y = Union(frozenset([ x, y ]));
     '''
 
 def union_terminals(x, y):
@@ -62,20 +60,30 @@ def union_terminals(x, y):
 def concat(add):
     r'''construct the term representing the concatenation of two languages
 
-    concat Null _ = Null();
-    concat _ Null = Null();
-    concat Epsilon x  = x;
-    concat x Epsilon = x;
-    concat (Concat x) (Concat y) = Concat(x + y);
-    concat x (Concat y) = Concat((x,) + y);
-    concat (Concat x) y = Concat(x + (y,));
-    concat x y = Concat((x , y));
+        concat Null _ = Null();
+        concat _ Null = Null();
+        concat Epsilon x  = x;
+        concat x Epsilon = x;
+        concat (Concat x) (Concat y) = Concat(x + y);
+        concat x (Concat y) = Concat((x,) + y);
+        concat (Concat x) y = Concat(x + (y,));
+        concat x y = Concat((x , y));
     '''
 
-def repeat(L): return Repeat(L);
+@Proto.decorate
+def repeat(L):
+    r'''construct the term representing any finite repetition of strings in a given language
+    
+        repeat Null = Null();
+        repeat Epsilon = Epsilon();
+        repeat (Repeat l) = Repeat(l);
+        repeat l = Repeat(l);
+    '''
+    # repeat (Output t Epsilon) = Ouput(t, Epsilon());
+
+def output(t, L): return (Output, t, L);
 
 def ref(name): return Ref(name);
-
 
 @Proto.decorate
 def derivative():
@@ -83,16 +91,17 @@ def derivative():
         
         derivative x Null          = Null();
         derivative x Epsilon       = Null();
-        derivative x (Terminals t) = Epsilon() if t(1) else Null();
+        derivative x (Terminals t) = Epsilon() if t(x) else Null();
         derivative x (Union ls)    = reduce(union, (derivative(x, l) for l in ls));
         derivative x (Concat ls)   = derivative_concat(x, ls);
         derivative x (Repeat l)    = concat(derivative(x, l), Repeat(l));
         derivative x l             = Derivative(x, l);
     '''
     # derivative x (Output t l)  = derivative(x, l);
+    # derivative _ (Finalize _)  = Null() # This seems wrong.  You could lose output when trying to simplify this around references.
 
 def derivative_concat(x, ls):
-    head, tail = (ls[0], ls[1]) if length(ls) == 2 else (ls[0], Concat(ls[1:]));
+    head, tail = (ls[0], ls[1]) if len(ls) == 2 else (ls[0], Concat(ls[1:]));
     return union(
         concat(derivative(x, head), tail),
         concat(finalize(head), derivative(x, tail))
@@ -107,7 +116,7 @@ def finalize():
         finalize (Terminals _) = Null();
         finalize (Union ls)    = reduce(union, (finalize(l) for l in ls));
         finalize (Concat ls)   = reduce(concat, (finalize(l) for l in ls));
-        finalize (Repeat l)    = finalize(l);
+        finalize (Repeat l)    = union(finalize(l), Epsilon());
         finalize l             = Finalize(l);
     '''
     # finalize (Output _ l)  = nullity(l);

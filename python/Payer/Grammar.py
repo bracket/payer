@@ -41,8 +41,8 @@ class Grammar(object):
     def __getitem__():
         r'''Grammar.__getitem__
 
-            getitem (Ref key) = self._languages[Ref(key)];
-            getitem key       = self._languages[Ref(key)];
+            getitem (Ref key) = self._raw[Ref(key)];
+            getitem key       = self._raw[Ref(key)];
         '''
 
     @MatcherMethod.decorate
@@ -59,6 +59,17 @@ class Grammar(object):
             self._raw[key] = value;
             self._references[key] = get_references(value);
 
+    @Proto.decorate_method
+    def deref():
+        r'''Grammar.deref
+
+            deref (Ref key) = self[key];
+            deref x         = x;
+        '''
+
+    def expand_references(self, L):
+        return top_down(self.deref, L);
+    
     # @MatcherMethod.decorate
     # def derivative(add):
     #     @add(var('c'), Ref(var('name')))
