@@ -1,17 +1,10 @@
 from Payer.Language import *;
 from Payer.Grammar import *;
+from Payer.Regular import *;
 
 __all__ = [
-    'terminal_range', 'terminal_sequence', 'common_grammar',
+    'common_grammar',
 ];
-
-#TOOD: These are probably more useful elsewhere
-
-def terminal_range(low, high):
-    return terminals(range(ord(low), ord(high) + 1));
-
-def terminal_sequence(seq):
-    return reduce(concat, (terminals([ord(x)]) for x in seq));
 
 def _negate(f):
 	return f.transform(lambda v: not v);

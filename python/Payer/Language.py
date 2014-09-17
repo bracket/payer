@@ -3,7 +3,7 @@
 
 import Proto;
 from Matcher import *;
-from TypeTag import TypeTag;
+from Payer.TypeTag import TypeTag;
 from Payer.TransitionFunction import *;
 
 __all__ = [
@@ -11,7 +11,7 @@ __all__ = [
     'output',
     'union', 'concat', 'repeat',
     'optional', 'plus',
-    'ref', 'derivative', 'finalize', # 'split_concat',
+    'ref', 'derivative', 'finalize',
     'pretty_print',
     'all_terminals', 'MAX_TERMINAL',
     'type_tags',
@@ -22,10 +22,10 @@ MAX_TERMINAL = 255;
 all_terminals = set(range(0, MAX_TERMINAL + 1));
 
 type_tags = [
-    'Null',       'Epsilon',  'Terminals',
-    'Union',      'Concat',   'Repeat',
-    'Output',     'Ref',
-    'Derivative', 'Finalize',
+    'Null',   'Epsilon',  'Terminals',
+    'Union',  'Concat',   'Repeat',
+    'Output', 'OutputNode',
+    'Ref',    'Derivative', 'Finalize',
 ];
 
 type_tags = { k : TypeTag(k) for k in type_tags };
@@ -35,13 +35,17 @@ globals().update(type_tags);
 def null(): return Null();
 def epsilon(): return Epsilon();
 
-def terminals(x):
-    if x: return Terminals(indicator(x, MAX_TERMINAL));
+def terminals(seq):
+    'terminals(seq) - take a sequence of terminals and return the term representing the set of those terminals'
+
+    if seq: return Terminals(indicator(seq, MAX_TERMINAL));
     else: return Epsilon();
 
+Sigma = terminals(all_terminals);
+
 @Proto.decorate
-def union(add):
-    r'''construct the term representing a union of two languages
+def union():
+    r'''union(L, R) - construct the term representing a union of L and R
 
         union Null x = x;
         union x Null = x;
@@ -57,69 +61,87 @@ def union_terminals(x, y):
     return Terminals(f);
 
 @Proto.decorate
-def concat(add):
-    r'''construct the term representing the concatenation of two languages
+def concat():
+    r'''concat(L, R) - construct the term representing the concatenation of L and R
 
         concat Null _ = Null();
         concat _ Null = Null();
         concat Epsilon x  = x;
         concat x Epsilon = x;
         concat (Concat x) (Concat y) = Concat(x + y);
+        concat (OutputNode t x) y = OutputNode(t, concat(x, y));
         concat x (Concat y) = Concat((x,) + y);
         concat (Concat x) y = Concat(x + (y,));
         concat x y = Concat((x , y));
     '''
 
 @Proto.decorate
-def repeat(L):
-    r'''construct the term representing any finite repetition of strings in a given language
-    
+def repeat():
+    r'''repeat(L) - construct the term representing any finite repetition of strings in L
+
         repeat Null = Null();
         repeat Epsilon = Epsilon();
         repeat (Repeat l) = Repeat(l);
+        repeat (Output t Epsilon) = Output(t, Epsilon());
         repeat l = Repeat(l);
     '''
-    # repeat (Output t Epsilon) = Ouput(t, Epsilon());
+    # repeat (OutputNode t l) = OutputNode(repeat(l));
 
-def output(t, L): return (Output, t, L);
+@Proto.decorate
+def output(t, L):
+    r'''output(t, L) - construct the term representing the output terminal t prepended to the language L
+
+        output t Null = Null();
+        output t l    = Output(t, L);
+    '''
+
+# def output_node(t, L): return OutputNode(t, L);
 
 def ref(name): return Ref(name);
 
 @Proto.decorate
 def derivative():
-    r'''Derivative
-        
-        derivative x Null          = Null();
-        derivative x Epsilon       = Null();
-        derivative x (Terminals t) = Epsilon() if t(x) else Null();
-        derivative x (Union ls)    = reduce(union, (derivative(x, l) for l in ls));
-        derivative x (Concat ls)   = derivative_concat(x, ls);
-        derivative x (Repeat l)    = concat(derivative(x, l), Repeat(l));
-        derivative x l             = Derivative(x, l);
+    r'''derivative(x, L) - construct the term repsenting the derivative of L with respect to x, simplifying if possible
+
+        derivative x Null             = Null();
+        derivative x Epsilon          = Null();
+        derivative x (Terminals t)    = Epsilon() if t(x) else Null();
+        derivative x (Union ls)       = reduce(union, (derivative(x, l) for l in ls));
+        derivative x (Concat ls)      = derivative_concat(x, ls);
+        derivative x (Repeat l)       = concat(derivative(x, l), Repeat(l));
+        derivative x (Output t l)     = OutputNode(t, derivative(x, l));
+        derivative x (OutputNode t l) = OutputNode(t, derivative(x, l));
+        derivative x l                = Derivative(x, l);
     '''
-    # derivative x (Output t l)  = derivative(x, l);
     # derivative _ (Finalize _)  = Null() # This seems wrong.  You could lose output when trying to simplify this around references.
 
+def concat_reduction(ls):
+    last = len(ls) - 1;
+    for i in xrange(last):
+        head = ls[i];
+        yield (head, Concat(ls[i + 1:])) if i < last - 1 else (head, ls[i + 1]);
+        if finalize(head) == Null(): break;
+
 def derivative_concat(x, ls):
-    head, tail = (ls[0], ls[1]) if len(ls) == 2 else (ls[0], Concat(ls[1:]));
-    return union(
-        concat(derivative(x, head), tail),
-        concat(finalize(head), derivative(x, tail))
+    return reduce(
+        union,
+        (concat(derivative(x, head), tail) for head, tail in concat_reduction(ls))
     );
 
 @Proto.decorate
 def finalize():
-    r'''Finalize
+    r'''finalize(L) - construct the term representing the finalization of L, simplifying if possible
 
-        finalize Null          = Null();
-        finalize Epsilon       = Epsilon();
-        finalize (Terminals _) = Null();
-        finalize (Union ls)    = reduce(union, (finalize(l) for l in ls));
-        finalize (Concat ls)   = reduce(concat, (finalize(l) for l in ls));
-        finalize (Repeat l)    = union(finalize(l), Epsilon());
-        finalize l             = Finalize(l);
+        finalize Null           = Null();
+        finalize Epsilon        = Epsilon();
+        finalize (Terminals _)  = Null();
+        finalize (Union ls)     = reduce(union, (finalize(l) for l in ls));
+        finalize (Concat ls)    = reduce(concat, (finalize(l) for l in ls));
+        finalize (Repeat l)     = union(finalize(l), Epsilon());
+        finalize (Output l)     = OutputNode(finalize(l));
+        finalize (OutputNode l) = OutputNode(finalize(l));
+        finalize l              = Finalize(l);
     '''
-    # finalize (Output _ l)  = nullity(l);
 
 @Matcher.decorate
 def _pretty_print(add):
@@ -153,3 +175,20 @@ def pretty_print(term, indent = ''):
 def optional(L): return union(epsilon(), L);
 
 def plus(L): return concat(L, repeat(L));
+
+#TODO: Probably need to memoize this
+@Proto.decorate
+def all_derivatives():
+    r'''all_derivatives
+
+        all_derivatives Null          = Sigma.transform(lambda v: Null());
+        all_derivatives Epsilon       = Sigma.transform(lambda v: Null());
+        all_derivatives (Terminals t) = t.transform(lambda v: Epsilon() if v else Null());
+        all_derivatives (Union ls)    = merge((all_derivatives(l) for l in ls), lambda p: (p.terminal, reduce(union, p.value))).compact();
+        all_derivatives (Concat ls)   = all_derivatives_concat(ls);
+        all_derivatives (Repeat l)    = all_derivatives(l).transform(lambda v: concat(v, repeat(l))).compact();
+    '''
+
+def all_derivatives_concat(ls):
+    ls = [ all_derivatives(head).transform(lambda v: concat(v, tail)) for head, tail in concat_reduction(ls) ];
+    return merge(ls, lambda p: (p.terminal, reduce(union, p.value))).compact();

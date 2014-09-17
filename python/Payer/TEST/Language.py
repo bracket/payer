@@ -64,6 +64,9 @@ class TestLanguage(unittest.TestCase):
                 value = derivative(ord(token), value);
                 self.assertEqual(value, expected);
 
+    def test_all_derivatives():
+        x, y, z = (terminals([ord(t)] for t in 'xyz'));
+
     # def test_output(self):
     #     x,y,z = (terminals((ord(t),)) for t in 'xyz');
     #     space = Grammar();
