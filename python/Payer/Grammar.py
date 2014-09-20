@@ -28,6 +28,13 @@ def get_references(L):
     gf(L);
     return gf.refs;
 
+@Proto.decorate
+def get_name():
+    r'''get_name
+
+        get_name (Ref name) = name;
+    '''
+
 class Grammar(object):
     def __init__(self):
         self._raw = { };
@@ -35,7 +42,10 @@ class Grammar(object):
         self._reduced = { };
 
     def __iter__(self):
-        return self._languages.iteritems();
+        return self._raw.iteritems();
+
+    def as_dict(self):
+        return { get_name(k) : v for k, v in self._raw.iteritems() };
     
     @Proto.decorate_method
     def __getitem__():
@@ -90,22 +100,6 @@ class Grammar(object):
 
     #     @add(var('L'))
     #     def _expand_nullity_ref(self, L): return L;
-
-    # def update_nullity_cache(self):
-    #     done = _NED;
-    #     changed = True;
-
-    #     while changed:
-    #         changed = False;
-
-    #         for k, L in self._nullity_cache.iteritems():
-    #             if L in done: continue;
-
-    #             M = self._nullity_cache[k] = nullity(bottom_up(self.expand_nullity_ref, L));
-    #             changed = changed or (M != L);
-
-    #     for k, L in self._nullity_cache.iteritems():
-    #         if L not in done: self._nullity_cache[k] = null();
 
     # @MatcherMethod.decorate
     # def nullity(add):

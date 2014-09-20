@@ -10,7 +10,7 @@ __all__ = [
     'null', 'epsilon', 'terminals',
     'output',
     'union', 'concat', 'repeat',
-    'optional', 'plus',
+    'optional', 'plus', 'sequence',
     'ref', 'derivative', 'finalize',
     'pretty_print',
     'all_terminals', 'MAX_TERMINAL',
@@ -53,7 +53,7 @@ def union():
         union x (Union y) = Union(frozenset([x]) | y);
         union (Union x) y = Union(x | frozenset([y]));
         union (Terminals x) (Terminals y) = union_terminals(x, y);
-        union x y = Union(frozenset([ x, y ]));
+        union x y = x if x == y else Union(frozenset([ x, y ]));
     '''
 
 def union_terminals(x, y):
@@ -111,9 +111,9 @@ def derivative():
         derivative x (Repeat l)       = concat(derivative(x, l), Repeat(l));
         derivative x (Output t l)     = OutputNode(t, derivative(x, l));
         derivative x (OutputNode t l) = OutputNode(t, derivative(x, l));
+        derivative _ (Finalize _)     = Null();
         derivative x l                = Derivative(x, l);
     '''
-    # derivative _ (Finalize _)  = Null() # This seems wrong.  You could lose output when trying to simplify this around references.
 
 def concat_reduction(ls):
     last = len(ls) - 1;
@@ -122,10 +122,16 @@ def concat_reduction(ls):
         yield (head, Concat(ls[i + 1:])) if i < last - 1 else (head, ls[i + 1]);
         if finalize(head) == Null(): break;
 
+    if finalize(ls[last - 1]) != Null(): yield (None, ls[last]);
+
 def derivative_concat(x, ls):
     return reduce(
         union,
-        (concat(derivative(x, head), tail) for head, tail in concat_reduction(ls))
+        (
+            concat(derivative(x, head), tail) if head is not None else derivative(x, tail)
+            for head, tail
+            in concat_reduction(ls)
+        )
     );
 
 @Proto.decorate
@@ -140,6 +146,7 @@ def finalize():
         finalize (Repeat l)     = union(finalize(l), Epsilon());
         finalize (Output l)     = OutputNode(finalize(l));
         finalize (OutputNode l) = OutputNode(finalize(l));
+        finalize (Finalize l)   = Finalize(l);
         finalize l              = Finalize(l);
     '''
 
@@ -175,6 +182,8 @@ def pretty_print(term, indent = ''):
 def optional(L): return union(epsilon(), L);
 
 def plus(L): return concat(L, repeat(L));
+
+def sequence(L, d): return concat(L, repeat(concat(d, L)));
 
 #TODO: Probably need to memoize this
 @Proto.decorate

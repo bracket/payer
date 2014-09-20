@@ -39,7 +39,7 @@ def tree_split(text):
     return stack[0];
 
 def format_pattern(term, ignore_vars = { }):
-    return term[0], '({},)'.format(', '.join(map(format_term, term[1:])));
+    return term[0], '({})'.format(' '.join('{},'.format(format_term(t)) for t in  term[1:]));
 
 def format_term(term, ignore_vars = { }):
     if isinstance(term, list): return format_type(term);
@@ -58,6 +58,7 @@ def generate_proto_cases(cases_text, global_ns, prefix_vars = [ ]):
     def_re = re.compile(r'\s*(?P<pattern>[^=]+?)\s*=\s*(?P<expr>.*);\s*$', re.MULTILINE);
     local_ns = { 'var' : Matcher.var, '_' : Matcher._ };
 
+    # TODO: Make me more robust, don't use finditer
     for m in def_re.finditer(cases_text):
         name, pattern = format_pattern(tree_split(m.group('pattern')));
 

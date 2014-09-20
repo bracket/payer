@@ -31,17 +31,13 @@ class TestProto(unittest.TestCase):
             def get_value():
                 r'''Returns first argument, gets instance attribute 'value' otherwise.
 
-                    value self x = x;
-                    value self   = self.value;
+                    value x = x;
+                    value   = self.value;
                 '''
 
         v = TestClass(2);
         self.assertEqual(v.get_value(1), 1);
         self.assertEqual(v.get_value(), 2);
-
-                
-
-            
 
 if __name__ == '__main__':
     unittest.main();

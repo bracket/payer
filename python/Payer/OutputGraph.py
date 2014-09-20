@@ -52,21 +52,14 @@ class Node(object):
         def process_output_nodes(self, Ls, leaves):
             return reduce(union, (self.process_output_nodes(L, leaves) for L in Ls));
 
-        # Can any term beyond the first in Concat Contain an embedded output node?  No.  Because we always move them out.
-        # But the first one can, since it may be a Union.
-        # But we move the OutputNodes off of the first term in a concat, so the first term will not itself be an output node.
-        
-        # But may produce several output nodes.  What are the remaining languages on those nodes, and what's the remaining lanugage
-        # to return?
-
         @add(Concat(var('Ls')), var('leaves'))
         def process_output_nodes(self, Ls, leaves):
             new_leaves = [ ];
-            r = self.process_output_nodes(Ls[0], new_leaves);
+            remaining = self.process_output_nodes(Ls[0], new_leaves);
             tail = Ls[1] if len(Ls) == 2 else Concat(Ls[1:]);
-            for l in new_leaves: l.language = concat(l.language, tail);
+            for leaf in new_leaves: leaf.language = concat(leaf.language, tail);
             leaves.extend(new_leaves);
-            return concat(r, tail);
+            return concat(remaining, tail);
 
         @add(OutputNode(var('t'), var('L'), var('leaves'))
         def process_output_nodes(self, t, L, leaves):
