@@ -34,8 +34,8 @@ class TestLanguage(unittest.TestCase):
             (union(x, epsilon()), Epsilon()),
             (union(x, y), Null()),
             (concat(x, y), Null()),
-            # (output(1, epsilon()), Epsilon()),
-            # (output(1, x), Null()),
+            (output(1, epsilon()), OutputNode(1, Epsilon())),
+            (output(1, x), Null()),
         ];
 
         for value, expected in tests:
@@ -46,17 +46,17 @@ class TestLanguage(unittest.TestCase):
         xy = concat(x, y);
 
         tests = [
-            (null(),       'x', [ null() ]),
-            (epsilon(),    'x', [ null() ]),
-            (x,            'x', [ epsilon() ]),
-            (y,            'x', [ null() ]),
-            (union(x, y),  'x', [ epsilon() ]),
-            (union(x, y),  'z', [ null() ]),
-            (concat(x, y), 'xy',[ y, epsilon() ]),
-            (concat(x, y), 'y', [ null() ]),
+            (null(),       'x',   [ null() ]),
+            (epsilon(),    'x',   [ null() ]),
+            (x,            'x',   [ epsilon() ]),
+            (y,            'x',   [ null() ]),
+            (union(x, y),  'x',   [ epsilon() ]),
+            (union(x, y),  'z',   [ null() ]),
+            (concat(x, y), 'xy',  [ y, epsilon() ]),
+            (concat(x, y), 'y',   [ null() ]),
             (repeat(x),    'xxy', [ repeat(x), repeat(x), null() ]),
             (repeat(xy),   'xyy', [ concat(y, repeat(xy)), repeat(xy), null() ]),
-            # (output(1, x), 'y', [ null() ]),
+            (output(1, x), 'y',   [ null() ]),
         ];
 
         for value, tokens, expecteds in tests:
@@ -64,14 +64,15 @@ class TestLanguage(unittest.TestCase):
                 value = derivative(ord(token), value);
                 self.assertEqual(value, expected);
 
-    # def test_output(self):
-    #     x,y,z = (terminals((ord(t),)) for t in 'xyz');
-    #     space = Grammar();
-    #     L = reduce(concat, [ output(3, x), output(1, y), union(output(5, y), output(4, z)) ]);
-    #     for c in 'xyz': L = space.derivative(ord(c), L);
+    def test_output(self):
+        x,y,z = (terminals((ord(t),)) for t in 'xyz');
 
-    #     out = tuple(reversed(list(next(get_outputs(L)))));
-    #     self.assertEqual(out, (3, 1, 4));
+        L = reduce(concat, [ output(3, x), output(1, y), union(output(5, y), concat(output(4, z), output(6, epsilon()))) ]);
+        for c in 'xyz': L = derivative(ord(c), L);
+        L = finalize(L);
+
+        expected = output_node(3, output_node(1, output_node(4, output_node(6, epsilon()))));
+        self.assertEqual(L, expected);
 
 if __name__ == '__main__':
     unittest.main();

@@ -8,7 +8,7 @@ from Payer.TransitionFunction import *;
 
 __all__ = [
     'null', 'epsilon', 'terminals',
-    'output',
+    'output', 'output_node',
     'union', 'concat', 'repeat',
     'optional', 'plus', 'sequence',
     'ref', 'derivative', 'finalize',
@@ -69,7 +69,7 @@ def concat():
         concat Epsilon x  = x;
         concat x Epsilon = x;
         concat (Concat x) (Concat y) = Concat(x + y);
-        concat (OutputNode t x) y = OutputNode(t, concat(x, y));
+        concat (OutputNode t x) y = output_node(t, concat(x, y));
         concat x (Concat y) = Concat((x,) + y);
         concat (Concat x) y = Concat(x + (y,));
         concat x y = Concat((x , y));
@@ -83,19 +83,25 @@ def repeat():
         repeat Epsilon = Epsilon();
         repeat (Repeat l) = Repeat(l);
         repeat (Output t Epsilon) = Output(t, Epsilon());
+        repeat (OutputNode t l) = output_node(t, repeat(l));
         repeat l = Repeat(l);
     '''
-    # repeat (OutputNode t l) = OutputNode(repeat(l));
 
 @Proto.decorate
-def output(t, L):
+def output():
     r'''output(t, L) - construct the term representing the output terminal t prepended to the language L
 
         output t Null = Null();
-        output t l    = Output(t, L);
+        output t l    = Output(t, l);
     '''
 
-# def output_node(t, L): return OutputNode(t, L);
+@Proto.decorate
+def output_node():
+    r'''output_node(t, L) - construct a node representing output terminal t attached to a language L
+
+        output_node t Null = Null();
+        output_node t l    = OutputNode(t, l);
+    '''
 
 def ref(name): return Ref(name);
 
@@ -109,8 +115,8 @@ def derivative():
         derivative x (Union ls)       = reduce(union, (derivative(x, l) for l in ls));
         derivative x (Concat ls)      = derivative_concat(x, ls);
         derivative x (Repeat l)       = concat(derivative(x, l), Repeat(l));
-        derivative x (Output t l)     = OutputNode(t, derivative(x, l));
-        derivative x (OutputNode t l) = OutputNode(t, derivative(x, l));
+        derivative x (Output t l)     = output_node(t, derivative(x, l));
+        derivative x (OutputNode t l) = output_node(t, derivative(x, l));
         derivative _ (Finalize _)     = Null();
         derivative x l                = Derivative(x, l);
     '''
@@ -138,16 +144,16 @@ def derivative_concat(x, ls):
 def finalize():
     r'''finalize(L) - construct the term representing the finalization of L, simplifying if possible
 
-        finalize Null           = Null();
-        finalize Epsilon        = Epsilon();
-        finalize (Terminals _)  = Null();
-        finalize (Union ls)     = reduce(union, (finalize(l) for l in ls));
-        finalize (Concat ls)    = reduce(concat, (finalize(l) for l in ls));
-        finalize (Repeat l)     = union(finalize(l), Epsilon());
-        finalize (Output l)     = OutputNode(finalize(l));
-        finalize (OutputNode l) = OutputNode(finalize(l));
-        finalize (Finalize l)   = Finalize(l);
-        finalize l              = Finalize(l);
+        finalize Null             = Null();
+        finalize Epsilon          = Epsilon();
+        finalize (Terminals _)    = Null();
+        finalize (Union ls)       = reduce(union, (finalize(l) for l in ls));
+        finalize (Concat ls)      = reduce(concat, (finalize(l) for l in ls));
+        finalize (Repeat l)       = union(finalize(l), Epsilon());
+        finalize (Output t l)     = output_node(t, finalize(l));
+        finalize (OutputNode t l) = output_node(t, finalize(l));
+        finalize (Finalize l)     = Finalize(l);
+        finalize l                = Finalize(l);
     '''
 
 @Matcher.decorate
