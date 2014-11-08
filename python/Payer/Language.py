@@ -156,6 +156,19 @@ def finalize():
         finalize l                = Finalize(l);
     '''
 
+@Proto.decorate
+def reconstruct():
+    r'''
+        reconstruct(L) - take a language which may not have been constructed by the language constructors in here and make it obey those constraints
+
+        reconstruct (Union ls)       = reduce(union, ls);
+        reconstruct (Concat ls)      = reduce(concat, ls);
+        reconstruct (Repeat l)       = repeat(l);
+        reconstruct (Output t l)     = output(t, l);
+        reconstruct (OutputNode t l) = output_node(t, l);
+        reconstruct l                = l;
+    '''
+
 @Matcher.decorate
 def _pretty_print(add):
     @add(var('indent'), Terminals(var('x')))

@@ -12,6 +12,16 @@ class TestGrammar(unittest.TestCase):
         expected = { ref('ws') : ws };
         self.assertEquals(expected, grammar._raw);
 
+    def test_finalize(self):
+        grammar = Grammar();
+
+        grammar['X'] = terminals([ ord('x') ]);
+        grammar['L'] = union(concat(ref('X'), ref('L')), epsilon())
+
+        L = grammar.reduce(ref('L'))
+        grammar.finalize(L);
+
+
     # def test_nullity_cache(self):
     #     ls = Grammar();
     #     x = terminals([ord('x')]);
