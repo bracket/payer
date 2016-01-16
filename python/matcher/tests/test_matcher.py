@@ -38,10 +38,13 @@ def test_pass_through_match():
     value = ('y', 1)
 
     assert match(x, value)
+
     assert x.value[0] is value
     assert x.value.parent is value
+
     assert x.value[1] ==  {'x' : 1}
     assert x.value.children == {'x' : 1}
+
     assert not match(x, ('z', 2))
 
 
@@ -90,39 +93,64 @@ def test_matcher_method():
 
 
 def test_top_down():
-    term = [ 'x', [ 1, 2 ], [ 2, 3 ] ]
+    term = [ 'x', [ 'y', 2, 3 ], [ 'z', 4, 5 ] ]
+    matches = set()
+
+    a = var('a')
 
     @Matcher.decorate
     def f(add):
-        @add(('x', var('x'), var('y')))
-        def _f(x, y):
-            return x + y
+        @add(('x', a, _))
+        def _f(a):
+            matches.add('x')
+            return [ 'x', a ]
 
-        @add((var('x')))
-        def _f(x):
-            if isinstance(x, list):
-                return sum(x)
-            else:
-                return x
+        @add(passvar('y', ('y', _, _)))
+        def _f(y):
+            matches.add('y')
+            return y.parent
 
-    assert top_down(f, term) ==  8
+        @add(passvar('z', ('z', _, _)))
+        def _f(z):
+            matches.add('z')
+            return z.parent
+
+        @add(a)
+        def _f(a):
+            matches.add('_')
+            return a
+
+    assert top_down(f, term) == [ 'x', [ 'y', 2, 3 ] ]
+    assert matches == { 'x', 'y', '_' }
 
 
 def test_bottom_up():
-    term = [ 'x', [ 'x', 1, 2 ], [ 'y', 3, 4] ]
+    term = [ 'x', [ 'y', 2, 3 ], [ 'z', 4, 5 ] ]
+    matches = set()
+
+    a = var('a')
 
     @Matcher.decorate
     def f(add):
-        @add(('x', var('x'), var('y')))
-        def _f(x, y):
-            return x * y
+        @add(('x', a, _))
+        def _f(a):
+            matches.add('x')
+            return [ 'x', a ]
 
-        @add(('y', var('x'), var('y')))
-        def _f(x, y):
-            return x - y
+        @add(passvar('y', ('y', _, _)))
+        def _f(y):
+            matches.add('y')
+            return y.parent
 
-        @add(var('x'))
-        def _f(x):
-            return x
+        @add(passvar('z', ('z', _, _)))
+        def _f(z):
+            matches.add('z')
+            return z.parent
 
-    assert bottom_up(f, term) == -2
+        @add(a)
+        def _f(a):
+            matches.add('_')
+            return a
+
+    assert bottom_up(f, term) == [ 'x', [ 'y', 2, 3 ] ]
+    assert matches == { 'x', 'y', 'z', '_' }

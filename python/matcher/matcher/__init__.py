@@ -26,7 +26,7 @@ __all__ = [
     'var',
 ]
 
-none = object()
+undef = object()
 
 TEXT = (str,)
 SEQUENCE = (tuple, list)
@@ -42,7 +42,7 @@ class Placeholder(PlaceholderBase):
     def __init__(self, name):
         super().__init__(name)
         self.value = None
-        
+
     def match(self, value):
         self.value = value
         return True
@@ -81,7 +81,7 @@ class TypedPlaceholder(PlaceholderBase):
             self.types = tuple(types)
         else:
             self.types = (types,)
-    
+
     def match(self, value):
         if not type(value) in self.types:
             return False
@@ -159,15 +159,15 @@ def match(pattern, value):
     from 'pattern'.
     '''
 
-    if value is none:
+    if value is undef:
         return False
     elif isinstance(pattern, PlaceholderBase):
         return pattern.match(value)
     elif isinstance(pattern, DICT) and isinstance(value, DICT):
-        return all(match(p, value.get(k, none)) for (k, p) in pattern.items())
+        return all(match(p, value.get(k, undef)) for (k, p) in pattern.items())
     elif isinstance(pattern, SEQUENCE) and isinstance(value, SEQUENCE):
         return all(match(p, v) for p,v
-            in zip_longest(pattern, value, fillvalue=none))
+            in zip_longest(pattern, value, fillvalue=undef))
     else:
         return pattern == value
 
@@ -198,7 +198,7 @@ def nest(f, term):
 
 
 def top_down(f, term):
-    term = nest(f, term)
+    term = f(term)
 
     if isinstance(term, SEQUENCE):
         return type(term)(top_down(f, t) for t in term)
@@ -214,7 +214,7 @@ def bottom_up(f, term):
     elif isinstance(term, DICT):
         term = type(term)((k, bottom_up(f, t)) for k, t in term.items())
 
-    return nest(f, term)
+    return f(term)
 
 
 class MatchException(Exception):
@@ -280,7 +280,7 @@ class MatcherMethod(PatternMatcherBase):
 
         super().__init__(name, ignore_parameters = ip)
 
-    
+
     def __get__(self, instance, t):
         def bind(*value):
             for pattern, args, f in self.patterns:
@@ -290,7 +290,7 @@ class MatcherMethod(PatternMatcherBase):
             raise MatchException("Inexhaustive pattern match in '{}': value = '{}'".format(self.name, value))
 
         return bind
-    
+
 class Finder(PatternMatcherBase):
     def __call__(self, value):
         remaining = [ value ]
@@ -315,7 +315,7 @@ class FinderMethod(PatternMatcherBase):
             ip.update(ignore_parameters)
 
         super().__init__(name, ignore_parameters = ip)
-    
+
     def __get__(self, instance, t):
         def bind(value):
             remaining = [ value ]
