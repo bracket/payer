@@ -3,8 +3,8 @@ r'''Provides basic pattern matching against Python tuples, lists, and dictionari
 __version__ = '0.1.0'
 
 from collections import namedtuple
+from itertools import zip_longest
 import inspect
-import itertools
 import re
 import sys
 
@@ -29,7 +29,7 @@ __all__ = [
 none = object()
 
 def _is_str(x):
-    return isinstance(x, (str, unicode))
+    return isinstance(x, str)
 
 def _is_sequence(x):
     return isinstance(x, (tuple, list, set, frozenset))
@@ -38,7 +38,7 @@ def _is_mapping(x):
     return isinstance(x, dict)
 
 def _iteritems(x):
-    return x.iteritems()
+    return x.items()
 
 class PlaceholderBase(object):
     def __init__(self, name):
@@ -46,7 +46,7 @@ class PlaceholderBase(object):
 
 class Placeholder(PlaceholderBase):
     def __init__(self, name):
-        super(Placeholder, self).__init__(name)
+        super().__init__(name)
         self.value = None
         
     def match(self, value):
@@ -61,13 +61,19 @@ PassthroughTuple = namedtuple('PassthroughTuple', [ 'parent', 'children' ])
 
 class PassThroughPlaceholder(PlaceholderBase):
     def __init__(self, name, pattern):
-        super(PassThroughPlaceholder, self).__init__(name)
+        super().__init__(name)
         self.pattern = pattern
         self.children = get_placeholders(pattern)
 
     def match(self, value):
-        if not match(self.pattern, value): return False
-        self.value = PassthroughTuple(value, { n : p.value for n, p in self.children.iteritems() })
+        if not match(self.pattern, value):
+            return False
+
+        self.value = PassthroughTuple(
+            value,
+            { n : p.value for n, p in self.children.items() }
+        )
+
         return True
 
 class TypedPlaceholder(PlaceholderBase):
@@ -131,14 +137,18 @@ def match(pattern, value):
     from 'pattern'.
     '''
 
-    if value is none: return False
-    elif isinstance(pattern, PlaceholderBase): return pattern.match(value)
+    if value is none:
+        return False
+    elif isinstance(pattern, PlaceholderBase):
+        return pattern.match(value)
     elif _is_mapping(pattern) and _is_mapping(value):
-        return all(match(p, value.get(k, none)) for (k, p) in _iteritems(pattern))
+        return all(match(p, value.get(k, none)) for (k, p) in pattern.items())
     elif _is_sequence(pattern) and _is_sequence(value):
         return all(match(p, v) for p,v
-            in itertools.izip_longest(pattern, value, fillvalue = none))
-    else: return pattern == value
+            in zip_longest(pattern, value, fillvalue=none))
+    else:
+        return pattern == value
+
 
 def find(pattern, value, depth = sys.maxsize):
     remaining = [ (value, depth) ]
@@ -152,24 +162,36 @@ def find(pattern, value, depth = sys.maxsize):
         if _is_mapping(value): remaining.extend((v, depth - 1) for k, v in _iteritems(value))
         if _is_sequence(value): remaining.extend((v, depth - 1) for v in value)
 
-def _nest(f, term):
+
+def nest(f, term):
     result = f(term)
-    while term is not result: term, result = result, f(result)
+    while term is not result:
+        term, result = result, f(result)
     return result
 
-def top_down(f, term):
-    term = _nest(f, term)
 
-    if _is_sequence(term): return type(term)(top_down(f, t) for t in term)
-    elif _is_mapping(term): return type(term)((k, top_down(f, t)) for k, t in _iteritems(term))
-    else: return term
+def top_down(f, term):
+    term = nest(f, term)
+
+    if _is_sequence(term):
+        return type(term)(top_down(f, t) for t in term)
+    elif _is_mapping(term):
+        return type(term)((k, top_down(f, t)) for k, t in term.items())
+    else:
+        return term
+
 
 def bottom_up(f, term):
-    if _is_sequence(term): term = type(term)(bottom_up(f, t) for t in term)
-    elif _is_mapping(term): term = type(term)((k, bottom_up(f, t)) for k, t in _iteritems(term))
-    return _nest(f, term)
+    if _is_sequence(term):
+        term = type(term)(bottom_up(f, t) for t in term)
+    elif _is_mapping(term):
+        term = type(term)((k, bottom_up(f, t)) for k, t in _iteritems(term))
+    return nest(f, term)
 
-class MatchException(BaseException): pass
+
+class MatchException(Exception):
+    pass
+
 
 class PatternMatcherBase(object):
     def __init__(self, name, ignore_parameters = None):
@@ -186,7 +208,7 @@ class PatternMatcherBase(object):
     def add(self, pattern, function):
         placeholders = get_placeholders(pattern)
         args = [ arg for arg in inspect.getargspec(function)[0] if arg not in self.ignore_parameters ]
-        diff = (placeholders.viewkeys() - args, args - placeholders.viewkeys())
+        diff = (placeholders.keys() - args, args - placeholders.keys())
 
         if diff[0] or diff[1]:
             raise MatchException('\n'.join((

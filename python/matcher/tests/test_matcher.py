@@ -1,109 +1,128 @@
-import unittest;
-from Matcher import  *;
+import pytest
+from matcher import *
 
-class TestMatcher(unittest.TestCase):
-    def test_get_placeholders(self):
-        x, y, z = map(var, 'xyz');
-        pattern = (x, (1, y), { 'weasel' : z });
+def test_get_placeholders():
+    x, y, z = map(var, 'xyz')
+    pattern = (x, (1, y), { 'weasel' : z })
 
-        actual = get_placeholders(pattern);
-        expected = { 'x' : x, 'y' : y, 'z' : z };
+    actual = get_placeholders(pattern)
+    expected = { 'x' : x, 'y' : y, 'z' : z }
 
-        self.assertEqual(actual, expected);
+    assert actual == expected
 
-        pattern = (x, x);
-        self.assertRaises(RuntimeError, get_placeholders, pattern);
+    with pytest.raises(RuntimeError):
+        pattern = (x, x)
+        get_placeholders(pattern)
 
-    def test_match(self):
-        x, y, z = map(var, 'xyz');
-        pattern = (x, 'weasel', y, { 'beaver' : z , 'weasel' : 1 });
 
-        self.assertTrue(match(pattern, (1, 'weasel', 2, { 'weasel' : 1, 'beaver' : 3 })))
-        self.assertEqual((x.value, y.value, z.value), (1, 2, 3));
-        self.assertFalse(match(pattern, (1, 2, 3)));
+def test_match():
+    x, y, z = map(var, 'xyz')
+    pattern = (x, 'weasel', y, { 'beaver' : z , 'weasel' : 1 })
 
-    def test_regex_match(self):
-        x, y = regexvar('x', r'x*y'), regexvar('y', r'ba*b');
-        pattern = (x, ('weasel', y));
-        self.assertTrue(match(pattern, ('xxy', ('weasel', 'baaaaaab'))));
-        self.assertEqual(('xxy', 'baaaaaab'), tuple(t.value.group() for t in (x, y)));
-        self.assertFalse(match(pattern, ('xzy', ('weasel', 'baab'))));
+    assert match(pattern, (1, 'weasel', 2, { 'weasel' : 1, 'beaver' : 3 }))
+    assert (x.value, y.value, z.value) == (1, 2, 3)
+    assert not match(pattern, (1, 2, 3))
 
-    def test_pass_through_match(self):
-        x = passvar('x', ('y', (var('x'))));
-        value = ('y', 1);
 
-        self.assertTrue(match(x, value));
-        self.assertIs(x.value[0], value);
-        self.assertIs(x.value.parent, value);
-        self.assertEqual(x.value[1], {'x' : 1});
-        self.assertEqual(x.value.children, {'x' : 1});
-        self.assertFalse(match(x, ('z', 2)));
+def test_regex_match():
+    x, y = regexvar('x', r'x*y'), regexvar('y', r'ba*b')
+    pattern = (x, ('weasel', y))
 
-    def test_find(self):
-        pattern = (var('x'), 1, var('y'));
-        f = list(find(pattern, ('a', { 'b' : ('x', 1, 'y') })));
-        self.assertEqual(f, [(('x', 1, 'y'), {'x' : 'x', 'y' : 'y' })]);
+    assert match(pattern, ('xxy', ('weasel', 'baaaaaab')))
+    assert ('xxy', 'baaaaaab') == tuple(t.value.group() for t in (x, y))
+    assert not match(pattern, ('xzy', ('weasel', 'baab')))
 
-    def test_matcher(self):
-        @Matcher.decorate
+
+def test_pass_through_match():
+    x = passvar('x', ('y', (var('x'))))
+    value = ('y', 1)
+
+    assert match(x, value)
+    assert x.value[0] is value
+    assert x.value.parent is value
+    assert x.value[1] ==  {'x' : 1}
+    assert x.value.children == {'x' : 1}
+    assert not match(x, ('z', 2))
+
+
+def test_find():
+    pattern = (var('x'), 1, var('y'))
+    f = list(find(pattern, ('a', { 'b' : ('x', 1, 'y') })))
+
+    assert f == [(('x', 1, 'y'), {'x' : 'x', 'y' : 'y' })]
+
+
+def test_matcher():
+    @Matcher.decorate
+    def f(add):
+        @add(var('x'), 1, var('y'))
+        def _f(x, y): return x + y
+
+        @add(var('x'))
+        def _f(x): return '-{}-'.format(x)
+
+    assert f(2, 1, 3) == 5
+    assert f('three') ==  '-three-'
+
+    with pytest.raises(MatchException):
+        f(2, 2, 3)
+
+
+def test_matcher_method():
+    class C(object):
+        @MatcherMethod.decorate
         def f(add):
-            @add(var('x'), 1, var('y'))
-            def _f(x, y): return x + y;
+            @add(1, var('x'), var('y'))
+            def _f(self, x, y):
+                return (self, x, y)
 
-            @add(var('x'))
-            def _f(x): return '-{}-'.format(x);
+            @add(2, var('x'), var('y'))
+            def _f(self, x , y):
+                return None
 
-        self.assertEqual(f(2, 1, 3), 5);
-        self.assertEqual(f('three'), '-three-');
-        self.assertRaises(MatchException, f, 2, 2, 3)
-    
-    def test_matcher_method(self):
-        class C(object):
-            @MatcherMethod.decorate
-            def f(add):
-                @add(1, var('x'), var('y'))
-                def _f(self, x, y): return (self, x, y);
+    c = C()
 
-                @add(2, var('x'), var('y'))
-                def _f(self, x , y): return None;
+    assert c.f(1, 'x', 'y') == (c, 'x', 'y')
+    assert c.f(2, 1, 2) is None
 
-        c = C();
+    with pytest.raises(MatchException):
+        c.f(3)
 
-        self.assertEqual(c.f(1, 'x', 'y'), (c, 'x', 'y'));
-        self.assertEqual(c.f(2, 1, 2), None);
-        self.assertRaises(MatchException, c.f, 3);
-    
-    def test_top_down(self):
-        term = [ 'x', [ 1, 2 ], [ 2, 3 ] ];
 
-        @Matcher.decorate
-        def f(add):
-            @add(('x', var('x'), var('y')))
-            def _f(x, y): return x + y;
+def test_top_down():
+    term = [ 'x', [ 1, 2 ], [ 2, 3 ] ]
 
-            @add((var('x')))
-            def _f(x):
-                if isinstance(x, list): return sum(x);
-                else: return x;
-        
-        self.assertEqual(top_down(f, term), 8);
+    @Matcher.decorate
+    def f(add):
+        @add(('x', var('x'), var('y')))
+        def _f(x, y):
+            return x + y
 
-    def test_bottom_up(self):
-        term = [ 'x', [ 'x', 1, 2 ], [ 'y', 3, 4] ];
+        @add((var('x')))
+        def _f(x):
+            if isinstance(x, list):
+                return sum(x)
+            else:
+                return x
 
-        @Matcher.decorate
-        def f(add):
-            @add(('x', var('x'), var('y')))
-            def _f(x, y): return x * y;
+    assert top_down(f, term) ==  8
 
-            @add(('y', var('x'), var('y')))
-            def _f(x, y): return x - y;
 
-            @add(var('x'))
-            def _f(x): return x;
+def test_bottom_up():
+    term = [ 'x', [ 'x', 1, 2 ], [ 'y', 3, 4] ]
 
-        self.assertEqual(bottom_up(f, term), -2);
+    @Matcher.decorate
+    def f(add):
+        @add(('x', var('x'), var('y')))
+        def _f(x, y):
+            return x * y
 
-if __name__ == '__main__':
-    unittest.main();
+        @add(('y', var('x'), var('y')))
+        def _f(x, y):
+            return x - y
+
+        @add(var('x'))
+        def _f(x):
+            return x
+
+    assert bottom_up(f, term) == -2
