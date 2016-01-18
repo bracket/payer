@@ -72,6 +72,10 @@ class TransitionFunction(object):
         return type(other) == TransitionFunction and self.definition == other.definition
 
 
+    def __hash__(self):
+        return hash(p.terminal for p in self.definition)
+
+
     def __repr__(self):
         return 'TransitionFunction(%s)' % str(self.definition)
 
