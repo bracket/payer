@@ -1,43 +1,58 @@
-import unittest;
+from matcher import match, var
+from payer import proto
 
-from Payer import Proto;
-from Payer.TypeTag import TypeTag;
+def test_decorate():
+    @proto.decorate
+    def test():
+        r'''Test function
 
-Null = TypeTag('Null');
-Union = TypeTag('Union');
-Terminals = TypeTag('Terminals');
+            test 1 x = x + 1
+            test 2 x = x - 2
+            test x y = 10
+        '''
 
-class TestProto(unittest.TestCase):
-    def test_union(self):
-        @Proto.decorate
-        def union():
-            r'''Returns the union of two languages
+    expected = [
+        (1, var('x')),
+        (2, var('x')),
+        (var('x'), var('y')),
+    ]
 
-                union Null x = x;
-                union x Null = x;
-                union (Union x) (Union y) = Union(x | y);
-                union x (Union y) = Union({x} | y);
-                union (Union x) y = Union(x | {y});
-                union (Terminals x) (Terminals y) = union_terminals(x, y);
-                union x y = x if x == y else Union({ x, y });
-            ''';
+    actual = [ pattern for pattern, _, _ in test.patterns ]
 
-    def test_decorate_method(self):
-        class TestClass(object):
-            def __init__(self, value):
-                self.value = value;
+    for e, a in zip(expected, actual):
+        assert match(e, a)
+        assert match(a, e)
 
-            @Proto.decorate_method
-            def get_value():
-                r'''Returns first argument, gets instance attribute 'value' otherwise.
+    assert test(1, 2) == 3
+    assert test(2, 1) == -1
+    assert test(5, 6) == 10
 
-                    value x = x;
-                    value   = self.value;
-                '''
 
-        v = TestClass(2);
-        self.assertEqual(v.get_value(1), 1);
-        self.assertEqual(v.get_value(), 2);
+def test_decorate_method():
+    class TestClass(object):
+        def __init__(self, value):
+            self.value = value
 
-if __name__ == '__main__':
-    unittest.main();
+        @proto.decorate_method
+        def get_value():
+            r'''Returns first argument, gets instance attribute 'value' otherwise.
+
+                value x = x
+                value   = self.value
+            '''
+    matcher = TestClass.__dict__['get_value']
+
+    expected = [
+        (var('x'),),
+        tuple()
+    ]
+
+    actual = [ pattern for pattern, _, _ in matcher.patterns ]
+
+    for e,a in zip(expected, actual):
+        assert match(e, a)
+        assert match(a, e)
+
+    v = TestClass(2)
+    assert v.get_value(1) == 1
+    assert v.get_value() == 2
