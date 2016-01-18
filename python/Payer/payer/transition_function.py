@@ -1,90 +1,126 @@
 __all__ = [
-    'TransitionPair', 'TransitionFunction',
-    'indicator', 'merge'
-];
+    'TransitionFunction',
+    'TransitionPair',
+    'indicator',
+    'merge',
+]
 
 class TransitionPair(object):
     def __init__(self, terminal, value):
-        self.terminal = terminal;
-        self.value = value;
+        self.terminal = terminal
+        self.value = value
+
 
     def __eq__(self, right):
-        return self.terminal == right.terminal and self.value == right.value;
+        return self.terminal == right.terminal and self.value == right.value
+
 
     def __lt__(self, right):
-        if self.terminal < right.terminal: return True;
-        if right.terminal < self.terminal: return False;
+        if self.terminal < right.terminal:
+            return True
 
-        return self.value < right.value;
+        if right.terminal < self.terminal:
+            return False
+
+        return self.value < right.value
+
 
     def __le__(self, right):
-        if self.terminal < right.terminal: return True;
-        if right.terminal < self.terminal: return False;
+        if self.terminal < right.terminal:
+            return True
 
-        return self.value <= right.value;
+        if right.terminal < self.terminal:
+            return False
+
+        return self.value <= right.value
+
 
     def __repr__(self):
-        return 'TransitionPair(%i, %s)' % (self.terminal, repr(self.value));
+        return 'TransitionPair(%i, %s)' % (self.terminal, repr(self.value))
+
 
     def __str__(self):
-        return '(%i, %s)' % (self.terminal, str(self.value));
+        return '(%i, %s)' % (self.terminal, str(self.value))
+
 
 class TransitionFunction(object):
-    undef = object();
+    undef = object()
 
     def __init__(self, definition):
-        if isinstance(definition, TransitionFunction): self.definition = list(definition.definition);
-        else: self.definition = sorted(definition);
+        if isinstance(definition, TransitionFunction):
+            self.definition = list(definition.definition)
+        else:
+            self.definition = sorted(definition)
+
 
     def __call__(self, terminal):
-        d = self.definition;
-        low, high = 0, len(d);
+        definition = self.definition
+        low, high = 0, len(definition)
 
         while low < high:
-            mid = (low + high) / 2;
-            if d[mid].terminal < terminal: low = mid + 1;
-            else: high = mid;
+            mid = int((low + high) // 2)
 
-        return d[low].value if 0 <= low < len(d) else self.undef;
+            if definition[mid].terminal < terminal:
+                low = mid + 1
+            else:
+                high = mid
+
+        return definition[low].value if 0 <= low < len(definition) else self.undef
+
 
     def __eq__(self, other):
-        return type(other) == TransitionFunction and self.definition == other.definition;
+        return type(other) == TransitionFunction and self.definition == other.definition
+
 
     def __repr__(self):
-        return 'TransitionFunction(%s)' % str(self.definition);
+        return 'TransitionFunction(%s)' % str(self.definition)
+
 
     def __str__(self):
-        return 'TransitionFunction([%s])' % ', '.join(map(str, self.definition));
+        return 'TransitionFunction([%s])' % ', '.join(map(str, self.definition))
+
 
     def compact(self):
-        return TransitionFunction(self.__compact());
+        return TransitionFunction(self._compact_pairs())
+
 
     @classmethod
     def from_items(cls, items):
-        return cls(TransitionPair(*p) for p in items);
+        return cls(TransitionPair(*p) for p in items)
+
 
     def transform(self, xform):
-        return TransitionFunction(TransitionPair(p.terminal, xform(p.value)) for p in self.definition);
+        return TransitionFunction(TransitionPair(p.terminal, xform(p.value)) for p in self.definition)
 
-    def __compact(self):
-        seq = iter(self.definition);
-        p = n = next(seq, None);
 
-        while n is not None:
-            n = next(seq, None);
+    def _compact_pairs(self):
+        seq = iter(self.definition)
+        current = previous = next(seq, None)
 
-            if n is None: yield p; p = n;
-            elif p.value == n.value: p = n;
-            else: yield p; p = n;
+        while current is not None:
+            current = next(seq, None)
 
-        if p is not None: yield p;
+            if current is None:
+                yield previous
+                previous = current
+            elif previous.value == current.value:
+                previous = current
+            else:
+                yield previous
+                previous = current
+
+        if previous is not None:
+            yield previous
+
 
 def merge(transitions, xform = lambda x : x):
-    import itertools, inspect;
-    ichain = itertools.chain.from_iterable;
+    import itertools, inspect
+    ichain = itertools.chain.from_iterable
 
-    if inspect.isgenerator(transitions): transitions = list(transitions);
-    terminals = sorted(set(ichain((p.terminal for p in f.definition) for f in transitions)));
+    if inspect.isgenerator(transitions):
+        transitions = list(transitions)
+
+    terminals = sorted(set(ichain((p.terminal for p in f.definition) for f in transitions)))
 
     return TransitionFunction(
         xform(p) for p in (
@@ -92,25 +128,36 @@ def merge(transitions, xform = lambda x : x):
             for t in terminals
         )
         if all(x is not TransitionFunction.undef for x in p.value)
-    );
+    )
 
-def __merge_consecutive(seq, S = lambda x : x + 1):
-    seq, n = iter(seq), object();
-    low = high = next(seq, n);
-    while high is not n:
-        x = next(seq, n);
-        if x is n or S(high) < x:
-            yield (low, high); low = high = x;
-        else: high = x;
 
-    if low is not n: yield (low, low);
+def merge_consecutive(seq, S = lambda x : x + 1):
+    undef = object()
+    seq = iter(seq)
 
-def __indicator(X, max_terminal, xform):
-    for low, high in __merge_consecutive(sorted(X)):
-        yield TransitionPair(low - 1, xform(False));
-        yield TransitionPair(high, xform(True));
+    low = high = next(seq, undef)
 
-    if high != max_terminal: yield TransitionPair(max_terminal, xform(False));
+    while high is not undef:
+        x = next(seq, undef)
 
-def indicator(X, max_terminal, xform = lambda x : x):
-    return TransitionFunction(__indicator(X, max_terminal, xform));
+        if x is undef or S(high) < x:
+            yield (low, high)
+            low = high = x
+        else:
+            high = x
+
+    if low is not undef:
+        yield (low, low)
+
+
+def indicator_pairs(X, max_terminal, xform):
+    for low, high in merge_consecutive(sorted(X)):
+        yield TransitionPair(low - 1, xform(False))
+        yield TransitionPair(high, xform(True))
+
+    if high != max_terminal:
+        yield TransitionPair(max_terminal, xform(False))
+
+
+def indicator(terminals, max_terminal, xform = lambda x : x):
+    return TransitionFunction(indicator_pairs(terminals, max_terminal, xform))
