@@ -54,6 +54,15 @@ def test_derivative():
             assert value == expected
 
 
+def test_reconstruct():
+    x, y, z = [ terminals([ ord(c) ]) for c in 'xyz' ]
+    reconstruct = Reconstruct()
+
+    assert reconstruct(Concat((Null(), x))) == concat(null(), x)
+    assert reconstruct(Union((Null(), Epsilon()))) == union(null(), epsilon())
+    assert reconstruct(Concat((Concat((x, y)), z))) == reduce(concat, (x, y, z))
+
+
 def test_output():
     x,y,z = (terminals((ord(t),)) for t in 'xyz')
 

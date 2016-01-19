@@ -1,44 +1,56 @@
-import unittest;
-from Payer.Grammar import *
-from Payer.Language import *;
+from payer.grammar import *
+from payer.language import *
+from functools import reduce
 
-class TestGrammar(unittest.TestCase):
-    def test_get_set(self):
-        grammar = Grammar();
-        ws = terminals([ord(' ')]);
+globals().update(language_tags)
 
-        grammar['ws'] = ws;
+def test_get_references():
+    import payer.grammar as grammar
 
-        expected = { ref('ws') : ws };
-        self.assertEquals(expected, grammar._raw);
+    L = union(terminals(map(ord, 'xyz')), ref('weasel'))
+    L = concat(L, ref('beaver'))
 
-    def test_finalize(self):
-        grammar = Grammar();
+    expected = { ref('weasel'), ref('beaver') }
 
-        grammar['X'] = terminals([ ord('x') ]);
-        grammar['L'] = union(concat(ref('X'), ref('L')), epsilon())
-
-        L = grammar.reduce(ref('L'))
-        grammar.finalize(L);
+    assert grammar.get_references(L) == expected
 
 
-    # def test_nullity_cache(self):
-    #     ls = Grammar();
-    #     x = terminals([ord('x')]);
+def test_get_set():
+    grammar = Grammar();
+    ws = terminals([ord(' ')]);
 
-    #     ls['L'] = union(concat(ref('L'), x), ref('L'));
-    #     ls['R'] = union(concat(x, ref('R')), epsilon());
+    grammar['ws'] = ws;
 
-    #     ls['X'] = reduce(concat, (ref('Y'), x, ref('Y')));
-    #     ls['Y'] = union(ref('X'), epsilon());
+    expected = { ref('ws') : ws };
+    assert grammar._raw == expected
 
-    #     ls.update_nullity_cache();
-    #     self.assertEqual(ls._nullity_cache, {
-    #         ref('L') : null(),
-    #         ref('R') : epsilon(),
-    #         ref('X') : null(),
-    #         ref('Y') : epsilon(),
-    #     });
 
-if __name__ == '__main__':
-    unittest.main();
+def test_determine_language_types():
+    g = Grammar()
+    x, y, z = [ terminals([ord(c)]) for c in 'xyz' ]
+
+    g['weasel'] = reduce(union, [ x, y, z ])
+    g['beaver'] = union(ref('weasel'), concat(ref('weasel'), ref('beaver')))
+
+    expected = {
+        ref('weasel') : RegularLanguage(),
+        ref('beaver') : ContextFreeLanguage(),
+    }
+
+    assert g.language_types == expected
+
+def test_finalize():
+    grammar = Grammar();
+
+    grammar['X'] = terminals([ ord('x') ]);
+    grammar['L'] = union(concat(ref('X'), ref('L')), epsilon())
+
+    expected = {
+        ref('X') : null(),
+        ref('L') : epsilon()
+    }
+
+    assert grammar.finalized == expected
+
+    L = union(ref('X'), ref('L'))
+    assert grammar.finalize(L) == epsilon()

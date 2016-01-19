@@ -16,6 +16,7 @@ __all__ = [
     'pretty_lines',
     'all_terminals', 'MAX_TERMINAL',
     'type_tags',
+    'reconstruct', 'Reconstruct',
 ]
 
 MAX_TERMINAL = 255
@@ -162,18 +163,37 @@ def finalize():
         finalize l                = Finalize(l)
     '''
 
-@proto.decorate
-def reconstruct():
-    r'''
-        reconstruct(L) - take a language which may not have been constructed by the language constructors in here and make it obey those constraints
+class Reconstruct(object):
+    undef = object()
 
-        reconstruct (Union ls)       = reduce(union, ls)
-        reconstruct (Concat ls)      = reduce(concat, ls)
-        reconstruct (Repeat l)       = repeat(l)
-        reconstruct (Output t l)     = output(t, l)
-        reconstruct (OutputNode t l) = output_node(t, l)
-        reconstruct l                = l
-    '''
+    def __init__(self):
+        self._cache = { }
+
+    def __call__(self, term):
+        undef = self.undef
+        out = self._cache.get(term, undef)
+
+        if out is not undef:
+            return out
+
+        out = self._cache[term] = self.reconstruct(term)
+        return out
+
+    @proto.decorate_method
+    def reconstruct():
+        r'''
+            reconstruct(L) - apply language term simplification rules to arbitrarily constructed terms
+
+            reconstruct (Union ls)       = reduce(union, map(self, ls))
+            reconstruct (Concat ls)      = reduce(concat, map(self, ls))
+            reconstruct (Repeat l)       = repeat(self(l))
+            reconstruct (Output t l)     = output(t, self(l))
+            reconstruct (OutputNode t l) = output_node(t, self(l))
+            reconstruct (Finalize l)     = finalize(self(l))
+            reconstruct l                = l
+        '''
+
+reconstruct = Reconstruct()
 
 class PrettyLines(object):
     def __init__(self, term):
@@ -225,11 +245,14 @@ def pretty_lines(term):
     return PrettyLines(term).lines
 
 
-def optional(L): return union(epsilon(), L)
+def optional(L):
+    return union(epsilon(), L)
 
-def plus(L): return concat(L, repeat(L))
+def plus(L):
+    return concat(L, repeat(L))
 
-def sequence(L, d): return concat(L, repeat(concat(d, L)))
+def sequence(L, delim):
+    return concat(L, repeat(concat(delim, L)))
 
 #TODO: Probably need to memoize this
 @proto.decorate

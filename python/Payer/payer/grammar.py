@@ -1,194 +1,173 @@
-import Proto;
-from Payer.Language import *;
-from Matcher import *;
-from TypeTag import TypeTag;
+from . import proto
+from .language import *
+from .type_tag import TypeTag
+from functools import reduce
+from matcher import *
 
-__all__ = [ 'Grammar', ];
+__all__ = [
+    'Grammar',
+    'language_tags',
+]
 
-globals().update(type_tags);
+globals().update(type_tags)
 
-language_tags = [ 'RegularLanguage', 'ContextFreeLanguage' ];
-language_tags = { k : TypeTag(k) for k in language_tags };
-globals().update(language_tags);
+language_tags = [ 'RegularLanguage', 'ContextFreeLanguage' ]
+language_tags = { k : TypeTag(k) for k in language_tags }
 
-class GetReferences(object):
-    def __init__(self): self.refs = set();
-
-    @Proto.decorate_finder_method
-    def __call__():
-        r'''get_references
-
-            get_references (Ref name) = self.refs.add(Ref(name));
-        '''
+globals().update(language_tags)
 
 def get_references(L):
-    gf = GetReferences();
-    gf(L);
-    return gf.refs;
+    pattern = passvar('x', Ref(var('y')))
+    return { pattern.value.parent for _, _ in find(pattern, L) }
 
-@Proto.decorate
+
+@proto.decorate
 def get_name():
     r'''get_name
 
-        get_name (Ref name) = name;
+        get_name (Ref name) = name
     '''
 
-class GetFinalizes(object):
-    def __init__(self): self.finalizes = set();
+def determine_finalization(languages):
+    null, epsilon = Null(), Epsilon()
+    done = { null, epsilon }
 
-    @Proto.decorate_finder_method
-    def __call__():
-        r'''get_finalizes
+    remaining = { key : finalize(L) for key, L in languages.items() }
+    out = {  }
 
-            get_finalizes (Finalize l) = self.finalizes.add(l);
-        '''
+    def safe_get(key):
+        return out.get(key, key)
 
-def get_finalizes(L):
-    gf = GetFinalizes();
-    gf(L);
-    return gf.finalizes;
+    reconstruct = Reconstruct()
 
-class Simplify(object):
-    def __init__(self, finalizes):
-        self.finalizes = finalizes;
-        self.done = { null(), epsilon() };
+    changed = True
+    while changed:
+        changed = False
 
-    @Proto.decorate_method
-    def __call__():
-        r'''simplify
+        for key, L in list(remaining.items()):
+            if L in done:
+                out[key] = L
+                remaining.pop(key)
+                changed = True
+            else:
+                term = bottom_up(safe_get, L)
+                term = reconstruct(term)
+                remaining[key] = term
 
-            simplify (Union xs)           = reduce(union, (self(x) for x in xs));
-            simplify (Concat xs)          = reduce(concat, (self(x) for x in xs));
-            simplify (Repeat l)           = repeat(self(l));
-            simplify (Finalize reference) = self._simplify_finalize(reference);
-            simplify x                    = x;
-        '''
+                if term != L:
+                    changed = True
 
-    def _simplify_finalize(self, reference):
-        deref = self.finalizes[reference];
-        if deref in self.done: return deref;
-        else: return Finalize(reference);
+    for key in remaining:
+        out.setdefault(key, null)
+
+    return out
+
+
+def determine_language_types(references):
+    regular_language = RegularLanguage()
+    regular_set = { regular_language }
+
+    out = { key : regular_language for key, refs in references.items() if not refs }
+    remaining = { key : L for key, L in references.items() if key not in out }
+
+    changed = True
+
+    while changed:
+        changed = False
+
+        for key, prev_types in list(remaining.items()):
+            next_types = { out.get(term, term) for term in prev_types }
+
+            if next_types == regular_set:
+                out[key] = regular_language
+                remaining.pop(key)
+                changed = True
+            elif prev_types != next_types:
+                remaining[key] = next_types
+                changed = True
+
+    context_free_language = ContextFreeLanguage()
+
+    for key in remaining:
+        out.setdefault(key, context_free_language)
+
+    return out
+
 
 class Grammar(object):
     def __init__(self):
-        self._raw = { };
-        self._references = { };
+        self._raw = { }
+        self._references = { }
+        self._language_types = None
+        self._finalized = None
+
 
     def __iter__(self):
-        return self._raw.iteritems();
+        return self._raw.items()
+
 
     def as_dict(self):
-        return { get_name(k) : v for k, v in self._raw.iteritems() };
+        return { get_name(k) : v for k, v in self._raw.items() }
 
-    @Proto.decorate_method
+
+    @proto.decorate_method
     def __getitem__():
         r'''Grammar.__getitem__
 
-            getitem (Ref key) = self._raw[Ref(key)];
-            getitem key       = self._raw[Ref(key)];
+            getitem (Ref key) = self._raw[Ref(key)]
+            getitem key       = self._raw[Ref(key)]
         '''
+
 
     @MatcherMethod.decorate
     def __setitem__(add):
-        @add(Ref(var('key')), var('value'))
-        def _setitem(self, key, value):
-            key = Ref(key);
-            self._raw[key] = value;
-            self._references[key] = get_references(value);
+        @add(passvar('key', Ref(_)), var('value'))
+        def setitem(self, key, value):
+            key = key.parent
+            self._raw[key] = value
+            self._references[key] = get_references(value)
+
+            self._language_types = None
+            self._finalized = None
+
 
         @add(var('key'), var('value'))
-        def _setitem(self, key, value):
-            key = Ref(key);
-            self._raw[key] = value;
-            self._references[key] = get_references(value);
+        def setitem(self, key, value):
+            self[Ref(key)] = value
 
-    def determine_language_types(self):
-        regular_language = RegularLanguage();
-        regular_set = { regular_language } ;
 
-        out = { L : regular_language for L, refs in self._references.iteritems() if not refs };
-        done = { L for L in out };
+    @property
+    def language_types(self):
+        if self._language_types is not None:
+            return self._language_types
 
-        remaining = dict(self._references);
+        types = self._language_types = determine_language_types(self._references)
+        return types
 
-        changed = True;
-        while changed:
-            changed = False;
-            for L, prev_types in remaining.iteritems():
-                if L in done: continue;
-                next_types = { out.get(term, term) for term in prev_types };
 
-                if next_types == regular_set:
-                    out[L] = regular_language;
-                    done.add(L);
-                elif prev_types != next_types:
-                    remaining[L] = next_types;
-                    changed = True;
+    @property
+    def finalized(self):
+        if self._finalized is not None:
+            return self._finalized
 
-        for L in remaining.viewkeys() - done: out[L] = ContextFreeLanguage();
+        finalized = self._finalized = determine_finalization(self._raw)
+        return finalized
 
-        return out;
-
-    @Proto.decorate_method
-    def deref():
-        r'''Grammar.deref
-
-            deref (Ref key) = self[key];
-            deref x         = x;
-        '''
-
-    def expand_references(self, L):
-        return top_down(self.deref, L);
-
-    @MatcherMethod.decorate
-    def regular_deref(add):
-        @add(passvar('r', Ref(var('key'))))
-        def regular_deref(self, r):
-            return self[r.parent] if self._language_types[r.parent] == RegularLanguage() else r.parent;
-
-        @add(var('L'))
-        def regular_deref(self, L): return L;
-
-    def expand_regular_references(self, L):
-        self._language_types = self.determine_language_types();
-        return top_down(self.regular_deref, L);
-
-    @Proto.decorate_method
-    def reduce(add):
-        r'''reduce
-
-            reduce (Ref name)       = self[name];
-            reduce (Derivative c l) = derivative(c, self.reduce(l));
-            reduce x                = x;
-        '''
 
     def finalize(self, L):
-        null, epsilon = Null(), Epsilon();
-        done = { null, epsilon };
+        finalized = self.finalized
+        valid = { Null(), Epsilon() }
 
-        remaining = [ L ];
-        finalized = { L : finalize(self.reduce(L)) };
+        def safe_get(key):
+            return finalized.get(key, key)
 
-        while remaining:
-            x = remaining.pop(0);
-            for f in get_finalizes(finalized[x]):
-                if f in finalized: continue;
-                finalized[f] = finalize(self.reduce(f));
-                remaining.append(f);
+        out = bottom_up(safe_get, L)
+        out = reconstruct(out)
 
-        simplify = Simplify(finalized);
+        if out not in valid:
+            raise RuntimeError(
+                "Unable to determine finalization for language with current grammar",
+                { "language" : L }
+            )
 
-        changed = True;
-        while changed:
-            changed = False;
-            for key, f in finalized.iteritems():
-                if f in done: continue;
-
-                s = simplify(f);
-                if s == f: continue;
-
-                finalized[key] = s;
-                changed = True;
-
-        if finalized[L] == epsilon: return epsilon;
-        else: return null;
+        return out
