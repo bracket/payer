@@ -29,7 +29,7 @@ __all__ = [
 undef = object()
 
 TEXT = (str,)
-SEQUENCE = (tuple, list)
+SEQUENCE = (tuple, list, frozenset, set)
 DICT = (dict,)
 
 
@@ -174,14 +174,14 @@ def match(pattern, value):
 
 def find(pattern, value, depth = sys.maxsize):
     remaining = [ (value, depth) ]
-    placeholders = get_placeholders(pattern).items()
+    placeholders = get_placeholders(pattern)
 
     while remaining:
         value,depth = remaining.pop(0)
         if depth <= 0: continue
 
         if match(pattern, value):
-            yield value, { k : v.value for k,v in placeholders }
+            yield value, { k : v.value for k,v in placeholders.items() }
 
         if isinstance(value, DICT):
             remaining.extend((v, depth - 1) for k, v in value.items())
