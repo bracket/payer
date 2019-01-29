@@ -3,6 +3,7 @@ __all__ = [
     'Epsilon',
     'Node',
     'Null',
+    'Repeat',
     'Terminal',
     'Union',
     'epsilon',
@@ -84,6 +85,11 @@ class Terminal(Node):
     
     def __hash__(self):
         return hash(self.value)
+
+
+def TerminalSet(Node):
+    def __init__(self):
+        self.bits = np.zeroes(32, dtype=np.uint8)
 
     
 class Concat(Node):
@@ -191,3 +197,32 @@ class Union(Node):
 
     def __hash__(self):
         return hash(('union', self.left, self.right))
+
+
+class Repeat(Node):
+    def __new__(cls, language, *args, **kwargs):
+        if isinstance(language, Null):
+            return null
+
+        if isinstance(language, Epsilon):
+            return epsilon
+            
+        return Node.__new__(self, language, *args, **kwargs)
+
+    def __init__(self, language):
+        self.language = language
+
+    def derivative(self, terminal):
+        return Union(
+            Concat(
+                self.language.derivative(terminal),
+                self.language
+            ),
+            Concat(
+                self.language.nullity(),
+                self.language
+            )
+        )
+
+    def nullity(self):
+        return self.language.nullity()

@@ -1,4 +1,7 @@
 from .nodes import *
+import functools
+
+memoize = functools.lru_cache()
 
 def string_to_terminals(string):
     out = null
