@@ -48,14 +48,14 @@ def test_languages():
     assert repeat.regular()
 
 
-def test_terminal_set():
-    from payer.terminal_set import TerminalSet, Union
+def test_terminal_bitset():
+    from payer.terminal_bitset import TerminalBitset, Union
 
     lower_list = [ chr(i) for i in range(ord('a'), ord('z') + 1) ]
     upper_list = [ chr(i) for i in range(ord('A'), ord('Z') + 1) ]
 
-    lower = TerminalSet('abcdefghijklmnopqrstuvwxyz')
-    upper = TerminalSet('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    lower = TerminalBitset('abcdefghijklmnopqrstuvwxyz')
+    upper = TerminalBitset('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
     alpha = Union(lower, upper)
 
@@ -132,11 +132,24 @@ def test_output():
 
 
 def test_terminal_set_grammar():
-    from payer.terminal_set import terminal_set_grammar
+    from payer.terminal_bitset import terminal_set_grammar
 
     language = terminal_set_grammar()
 
-    test_string = '[abc]'
+    tests = [
+        '[abc]',
+        '[a-z]',
+        '[-a-z]',
+        '[^A]',
+        '[^-]',
+         r'[\]]',
+         r'[\\]',
+    ]
 
-    for c in test_string:
-        language = language.derivative(c)
+    for string in tests:
+        test = language
+
+        for c in string:
+            test = test.derivative(c)
+
+        assert test.terminate().nullity() is epsilon

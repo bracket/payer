@@ -1,4 +1,4 @@
-from .util import list_to_concat, list_to_union, memoize
+from .util import list_to_concat, list_to_union, to_plus, memoize
 from . import nodes
 
 import numpy as np
@@ -11,13 +11,13 @@ import numpy as np
 # Add imports here that aren't overridden
 
 __all__ = [
-    'TerminalSet',
+    'TerminalBitset',
     'Union',
     'terminal_set_grammar',
 ]
 
 
-class TerminalSet(nodes.Node):
+class TerminalBitset(nodes.Node):
     # For now this class is immutable, and can only handle terminals between 0
     # and 255 inclusive.
 
@@ -52,7 +52,7 @@ class TerminalSet(nodes.Node):
         return self.nullity()
 
     def negate(self):
-        return TerminalSet(np.invert(self.bits))
+        return TerminalBitset(np.invert(self.bits))
 
     def get_chars(self):
         bits = self.bits
@@ -78,7 +78,7 @@ class TerminalSet(nodes.Node):
         return '[{}]'.format(self.get_chars())
 
     def __repr__(self):
-        return "TerminalSet('{}')".format(self.get_chars())
+        return "TerminalBitset('{}')".format(self.get_chars())
 
 
 @memoize
@@ -103,17 +103,17 @@ UnionBase = nodes.Union
 
 class Union(UnionBase):
     def __new__(cls, left, right, *args, **kwargs):
-        if isinstance(left, TerminalSet):
-            if isinstance(right, TerminalSet):
-                return TerminalSet(left.bits, right.bits)
-            elif isinstance(right, Terminal):
-                return TerminalSet(left.bits, terminal_map()[right.value])
+        if isinstance(left, TerminalBitset):
+            if isinstance(right, TerminalBitset):
+                return TerminalBitset(left.bits, right.bits)
+            elif isinstance(right, nodes.Terminal):
+                return TerminalBitset(left.bits, terminal_map()[right.value])
 
-        if isinstance(left, Terminal):
-            if isinstance(right, TerminalSet):
-                return TerminalSet(terminal_map()[left.value], right.bits)
-            elif isinstance(right, Terminal):
-                return TerminalSet(
+        if isinstance(left, nodes.Terminal):
+            if isinstance(right, TerminalBitset):
+                return TerminalBitset(terminal_map()[left.value], right.bits)
+            elif isinstance(right, nodes.Terminal):
+                return TerminalBitset(
                     terminal_map()[left.value],
                     terminal_map()[right.value],
                 )
@@ -126,12 +126,21 @@ nodes.Union = Union
 
 
 def terminal_set_grammar():
-    left_bracket  = nodes.TerminalSet('[')
-    right_bracket = ndoes.TerminalSet(']')
-    back_slash   = nodes.TerminalSet('\\')
-    carat = nodes.TerminalSet('^')
-    hyphen = TerminalSet('-')
+    left_bracket  = TerminalBitset('[')
+    right_bracket = TerminalBitset(']')
+    back_slash   = TerminalBitset('\\')
+    carat = TerminalBitset('^')
+    hyphen = TerminalBitset('-')
 
+    special = list_to_union([
+        left_bracket,
+        right_bracket,
+        back_slash,
+        carat,
+        hyphen,
+    ])
+
+    not_special = special.negate()
 
     slash_escape = nodes.Concat(back_slash, back_slash)
     right_escape = nodes.Concat(back_slash, right_bracket)
@@ -142,8 +151,27 @@ def terminal_set_grammar():
     )
 
     carat_option = nodes.Union(carat, nodes.epsilon)
-    hyphen_option = nodes.Union(carat, nodes.epsilon)
+    hyphen_option = nodes.Union(hyphen, nodes.epsilon)
 
-    range = Concat(nodes.dot, Concat(hyphen, nodes.dot))
+    range = list_to_concat([
+        nodes.dot,
+        hyphen,
+        nodes.dot
+    ])
 
-    # left_bracket (carat)? (hyphen)? (range|escape|not_right_bracket)* right_bracket
+    inner = list_to_union([
+        slash_escape,
+        right_escape,
+        range,
+        not_special
+    ])
+
+    out = list_to_concat([
+        left_bracket,
+        carat_option,
+        hyphen_option,
+        nodes.Repeat(inner),
+        right_bracket
+    ])
+
+    return out
