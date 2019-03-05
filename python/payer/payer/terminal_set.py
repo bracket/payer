@@ -1,7 +1,5 @@
-from .util import memoize
+from .util import list_to_concat, list_to_union, memoize
 from . import nodes
-
-from .nodes import Concat, Repeat
 
 import numpy as np
 
@@ -39,13 +37,19 @@ class TerminalSet(nodes.Node):
             self.bits |= right
 
     def derivative(self, terminal):
-        if terminal.value in self:
+        if terminal in self:
             return nodes.epsilon
         else:
             return nodes.null
 
     def nullity(self):
         return nodes.null
+
+    def regular(self):
+        return True
+
+    def terminate(self):
+        return self.nullity()
 
     def negate(self):
         return TerminalSet(np.invert(self.bits))
@@ -95,8 +99,9 @@ def terminal_map():
 
     return terminal_map
 
+UnionBase = nodes.Union
 
-class Union(nodes.Union):
+class Union(UnionBase):
     def __new__(cls, left, right, *args, **kwargs):
         if isinstance(left, TerminalSet):
             if isinstance(right, TerminalSet):
@@ -110,20 +115,35 @@ class Union(nodes.Union):
             elif isinstance(right, Terminal):
                 return TerminalSet(
                     terminal_map()[left.value],
-                    temrinal_map()[right.value],
+                    terminal_map()[right.value],
                 )
 
-        return super(cls).__new__(cls, left, right, *args, **kwargs)
+        return UnionBase.__new__(cls, left, right, *args, **kwargs)
 
 
 # Cannot tell if this is insane or not
-# No, if other classes try to inherit from nodes.Union before this happens.
 nodes.Union = Union
 
 
 def terminal_set_grammar():
-    left_bracket  = TerminalSet('[')
-    not_special = TerminalSet(r'\-[').negate()
-    right_bracket = TerminalSet(']')
+    left_bracket  = nodes.TerminalSet('[')
+    right_bracket = ndoes.TerminalSet(']')
+    back_slash   = nodes.TerminalSet('\\')
+    carat = nodes.TerminalSet('^')
+    hyphen = TerminalSet('-')
 
-    return Concat(left_bracket, Concat(not_special, right_bracket))
+
+    slash_escape = nodes.Concat(back_slash, back_slash)
+    right_escape = nodes.Concat(back_slash, right_bracket)
+
+    escape = nodes.Union(
+        slash_escape,
+        right_escape,
+    )
+
+    carat_option = nodes.Union(carat, nodes.epsilon)
+    hyphen_option = nodes.Union(carat, nodes.epsilon)
+
+    range = Concat(nodes.dot, Concat(hyphen, nodes.dot))
+
+    # left_bracket (carat)? (hyphen)? (range|escape|not_right_bracket)* right_bracket
