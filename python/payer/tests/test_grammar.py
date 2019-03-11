@@ -1,3 +1,5 @@
+import payer.nodes as nodes
+
 from payer.nodes import *
 from payer.util import *
 
@@ -153,3 +155,48 @@ def test_terminal_set_grammar():
             test = test.derivative(c)
 
         assert test.terminate().nullity() is epsilon
+
+
+def test_flat_concat():
+    from payer.flat_concat import FlatConcat, Concat
+
+    a = Terminal('a')
+    b = Terminal('b')
+    c = Terminal('c')
+
+    ab = Concat(a, b)
+    abc = FlatConcat([ a, b, c ])
+
+    assert isinstance(ab, FlatConcat)
+    assert isinstance(abc, FlatConcat)
+
+    assert FlatConcat([]) is null
+    assert FlatConcat([ a ]) is a
+
+    assert ab.derivative('c') is null
+    assert ab.derivative('a') == b
+
+    assert ab.derivative('a').derivative('c') is null
+    assert ab.derivative('a').derivative('b') is epsilon
+
+    assert abc.derivative('a') == FlatConcat([ b, c ])
+
+
+def test_flat_union():
+    from payer.flat_union import FlatUnion, Union
+
+    a = Terminal('a')
+    b = Terminal('b')
+    c = Terminal('c')
+
+    ab = Union(a, b)
+    abe = Union(ab, epsilon)
+
+    assert isinstance(ab, FlatUnion)
+    assert isinstance(abe, FlatUnion)
+
+    assert ab.nullity() is null
+    assert abe.nullity() is epsilon
+
+    assert ab.derivative('c') is null
+    assert ab.derivative('a') is epsilon
